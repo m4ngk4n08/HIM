@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="../HIM.Gateway/HIM.Gateway.csproj" />
+  <Project Path="HIM.AiService/HIM.AiService.csproj" />
+</Solution>

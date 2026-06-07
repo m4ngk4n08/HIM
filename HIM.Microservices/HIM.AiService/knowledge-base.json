@@ -1,0 +1,69 @@
+{
+  "personal_info": {
+    "name": "Angelo T. Davales",
+    "role": "Full Stack & Microservices Developer",
+    "location": "Taguig City, Philippines",
+    "contact": {
+      "email": "angelodavales0528@gmail.com",
+      "phone": "+639165073299",
+      "github": "https://m4ngk4n08.github.io/"
+    },
+    "summary": "Experienced Software Engineer with a strong background in enterprise banking systems, API security, and cloud-native development. Specialized in .NET ecosystem, microservices, and modernizing legacy systems for Fortune 500 clients.",
+    "personality": "Professional, technical, and detail-oriented. The AI should speak with the authority of a senior engineer but maintain a 'Gen Z' elegant and approachable tone. It values clean code, security (HIPAA/Banking standards), and efficient architecture."
+  },
+  "experience": [
+    {
+      "company": "Accenture",
+      "position": "Package App Developer",
+      "duration": "June 2025 – Feb 2026",
+      "highlights": [
+        "Contributed to enterprise banking system modernization for Fortune 500 client using Temenos (AFSVision).",
+        "Engaged in intensive upskilling with .NET 9, Azure, and cloud-native development.",
+        "Resolved critical production issues and refactored legacy modules for modern architecture standards."
+      ]
+    },
+    {
+      "company": "IChart (Freelance)",
+      "position": "Web Developer",
+      "duration": "Oct 2022 – Dec 2023",
+      "highlights": [
+        "Designed secure healthcare web solutions for the hospice care industry.",
+        "Implemented HIPAA-style compliance with role-based access control and multi-layer authentication.",
+        "Built full-stack features using .NET MVC 6, Dapper ORM, and MySQL on Azure."
+      ]
+    },
+    {
+      "company": "Philippine Savings Bank (PSBank)",
+      "position": "Systems Analyst",
+      "duration": "May 2020 – Apr 2021",
+      "highlights": [
+        "Led API security initiatives using SSL encryption and WSO2 API management gateway.",
+        "Developed reusable Enrollment API Gateway for mobile and online banking.",
+        "Enhanced deposit APIs for seamless integration with Metrobank systems.",
+        "Implemented custom check digit algorithms for billing modules."
+      ]
+    },
+    {
+      "company": "Software Laboratories Inc.",
+      "position": ".NET Developer",
+      "duration": "May 2018 – Sept 2019",
+      "highlights": [
+        "Developed enterprise banking applications and Unified Back Office systems.",
+        "Implemented session management and policy-based authentication.",
+        "Created secure API File Manager with MIME validation."
+      ]
+    }
+  ],
+  "technical_skills": {
+    "backend": [".NET 10/9/6", "C#", "Microservices", "RESTful API", "Dapper ORM", "Repository Pattern", "Dependency Injection (Autofac)"],
+    "frontend": ["JavaScript", "Bootstrap", "Razor Views", "HTML5", "CSS"],
+    "data_sources": ["MongoDB", "Oracle", "MS SQL Server", "MySQL"],
+    "platforms": ["Docker", "Azure (Integration/DevOps)", "WSO2 API Management", "Swagger", "GitBash"],
+    "specialties": ["Banking System Modernization", "API Security", "HIPAA Compliance", "Legacy System Refactoring"]
+  },
+  "education": {
+    "degree": "Bachelor of Science in Computer Science",
+    "institution": "Taguig City University",
+    "graduation": "October 2017"
+  }
+}
