@@ -4,6 +4,6 @@ namespace HIM.Gateway.Services.SSH.Interfaces
 {
     public interface IAuthenticationService
     {
-        bool Authenticate(object? sender, SshAuthenticatingEventArgs e);
+        void Authenticate(object? sender, SshAuthenticatingEventArgs e);
     }
 }
