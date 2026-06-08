@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+option csharp_namespace = "HIM.Shared.Protos";
+
+package heuristic;
+
+// The Heuristic Interactive Messenger service definition
+service HeuristicMessenger {
+  // A bidirectional or server-streaming chat method
+  rpc StreamChat (ChatRequest) returns (stream ChatResponse);
+}
+
+// The request message containing the user's prompt and a session identifier
+message ChatRequest {
+  string session_id = 1;
+  string user_input = 2;
+}
+
+// The response chunk containing a piece of the AI's generated text
+message ChatResponse {
+  string text_delta = 1;
+  bool is_final = 2;
+}

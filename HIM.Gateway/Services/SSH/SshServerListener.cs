@@ -1,17 +1,10 @@
 ﻿using HIM.Gateway.Models;
 using HIM.Gateway.Services.SSH.Interfaces;
 using Microsoft.DevTunnels.Ssh;
-using Microsoft.DevTunnels.Ssh.Algorithms;
-using Microsoft.DevTunnels.Ssh.Messages;
-using Microsoft.DevTunnels.Ssh.Tcp;
 using Microsoft.Extensions.Options;
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
-using System.Runtime.InteropServices.Marshalling;
-using System.Text;
 
 namespace HIM.Gateway.Services.SSH
 {
@@ -21,6 +14,7 @@ namespace HIM.Gateway.Services.SSH
         private readonly IHostKeyService _hostKeyService;
         private readonly IAuthenticationService _authenticationService;
         private readonly SshSettings _settings;
+        private readonly SemaphoreSlim _connectionSemaphore;
 
         public SshServerListener(
             ITuiEngine tuiEngine,
@@ -32,20 +26,33 @@ namespace HIM.Gateway.Services.SSH
             _hostKeyService = hostKeyService;
             _authenticationService = authenticationService;
             _settings = settings.Value;
+            _connectionSemaphore = new SemaphoreSlim(_settings.MaxConnections, _settings.MaxConnections);
         }
         public async Task StartAsync(CancellationToken cancellationToken)
         {
             var listener = new TcpListener(IPAddress.Any, _settings.Port);
             listener.Start();
 
-            Console.WriteLine($"[Gateway] Listeneing for SSH connections on port: {_settings.Port}");
+            Console.WriteLine($"[Gateway] Listening for SSH connections on port: {_settings.Port} (Max: {_settings.MaxConnections})");
 
             try
             {
                 while(!cancellationToken.IsCancellationRequested)
                 {
-                    TcpClient tcpClient = await listener.AcceptTcpClientAsync(cancellationToken);
-                    _ = Task.Run(() => HandleConnectionSafelyAsync(tcpClient, cancellationToken));
+                    // Wait for an available slot before accepting a new connection
+                    await _connectionSemaphore.WaitAsync(cancellationToken);
+
+                    try
+                    {
+                        TcpClient tcpClient = await listener.AcceptTcpClientAsync(cancellationToken);
+                        _ = Task.Run(() => HandleConnectionSafelyAsync(tcpClient, cancellationToken));
+                    }
+                    catch
+                    {
+                        // If Accept fails or is cancelled, release the slot immediately
+                        _connectionSemaphore.Release();
+                        throw;
+                    }
                 }
             }
             catch(OperationCanceledException)
@@ -60,16 +67,22 @@ namespace HIM.Gateway.Services.SSH
 
         private async Task HandleConnectionSafelyAsync(TcpClient tcpClient, CancellationToken cancellationToken)
         {
-            using (tcpClient)
+            try
             {
-                try
+                using (tcpClient)
                 {
                     await HandleConnectionAsync(tcpClient, cancellationToken);
                 }
-                catch (Exception e)
-                {
-                    Console.WriteLine($"[Gateway] Error handling connection from {tcpClient.Client?.RemoteEndPoint}");
-                }
+            }
+            catch (Exception)
+            {
+                Console.WriteLine($"[Gateway] Error handling connection from {tcpClient.Client?.RemoteEndPoint}");
+            }
+            finally
+            {
+                // ALWAYS release the slot back to the bouncer when the guest leaves
+                _connectionSemaphore.Release();
+                Console.WriteLine($"[Gateway] Slot released. Active connections: {_settings.MaxConnections - _connectionSemaphore.CurrentCount}");
             }
         }
 

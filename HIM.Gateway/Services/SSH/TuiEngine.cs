@@ -14,7 +14,14 @@ namespace HIM.Gateway.Services.SSH
     {
         private const int DefaultWidth = 80;
         private const int DefaultHeight = 24;
-        private SshSettings sshSettings;
+        private const int MaxInputLength = 256;
+
+        private readonly SshSettings _settings;
+
+        public TuiEngine(Microsoft.Extensions.Options.IOptions<SshSettings> settings)
+        {
+            _settings = settings.Value;
+        }
 
         public async Task RunAsync(SshChannel channel, CancellationToken ct)
         {
@@ -103,48 +110,69 @@ namespace HIM.Gateway.Services.SSH
             console.Write(new Text("> ", new Style(Color.Green)));
 
             byte[] buffer = new byte[1024];
+            
+            // --- SECURITY: Idle Timeout Watchdog ---
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            var idleTimeout = TimeSpan.FromMinutes(_settings.IdleTimeoutMinutes);
 
             while (!ct.IsCancellationRequested)
             {
-                // Await incoming network data
-                int read = await stream.ReadAsync(buffer, 0, buffer.Length, ct);
-                if (read <= 0) break;
-
-                for (int i = 0; i < read; i++)
+                try
                 {
-                    byte b = buffer[i];
+                    // Reset timeout for each read attempt
+                    timeoutCts.CancelAfter(idleTimeout);
 
-                    // --- 1. Handle Enter Key (Command Execution) ---
-                    if (b == 13 || b == 10)
-                    {
-                        var command = inputBuffer.ToString().Trim();
-                        inputBuffer.Clear();
+                    // Await incoming network data with the watchdog token
+                    int read = await stream.ReadAsync(buffer, 0, buffer.Length, timeoutCts.Token);
+                    if (read <= 0) break;
 
-                        console.WriteLine();
-                        await ProcessCommandAsync(console, command, ct);
-                        
-                        console.Write(new Text("> ", new Style(Color.Green)));
-                    }
-                    // --- 2. Handle Backspace (Deletion) ---
-                    else if (b == 8 || b == 127)
+                    for (int i = 0; i < read; i++)
                     {
-                        if (inputBuffer.Length > 0)
+                        byte b = buffer[i];
+
+                        // --- 1. Handle Enter Key (Command Execution) ---
+                        if (b == 13 || b == 10)
                         {
-                            inputBuffer.Remove(inputBuffer.Length - 1, 1);
-                            // Visual deletion: move cursor back, clear char, move back
-                            await stream.WriteAsync(Encoding.UTF8.GetBytes("\b \b"), 0, 3, ct);
+                            var command = inputBuffer.ToString().Trim();
+                            inputBuffer.Clear();
+
+                            console.WriteLine();
+                            await ProcessCommandAsync(console, command, ct);
+                            
+                            console.Write(new Text("> ", new Style(Color.Green)));
+                        }
+                        // --- 2. Handle Backspace (Deletion) ---
+                        else if (b == 8 || b == 127)
+                        {
+                            if (inputBuffer.Length > 0)
+                            {
+                                inputBuffer.Remove(inputBuffer.Length - 1, 1);
+                                // Visual deletion: move cursor back, clear char, move back
+                                await stream.WriteAsync(Encoding.UTF8.GetBytes("\b \b"), 0, 3, ct);
+                            }
+                        }
+                        // --- 3. Handle Printable Characters (Echo) ---
+                        else if (b >= 32 && b <= 126)
+                        {
+                            // SECURITY: Limit input length to prevent memory exhaustion
+                            if (inputBuffer.Length < MaxInputLength)
+                            {
+                                inputBuffer.Append((char)b);
+                                // Immediate network echo
+                                await stream.WriteAsync(new[] { b }, 0, 1, ct);
+                            }
                         }
                     }
-                    // --- 3. Handle Printable Characters (Echo) ---
-                    else if (b >= 32 && b <= 126)
-                    {
-                        inputBuffer.Append((char)b);
-                        // Immediate network echo
-                        await stream.WriteAsync(new[] { b }, 0, 1, ct);
-                    }
+                    
+                    await stream.FlushAsync(ct);
                 }
-                
-                await stream.FlushAsync(ct);
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                {
+                    // If the timeoutCts fired but the main ct is still active, it's an idle timeout
+                    console.MarkupLine("\n[red]Session timed out due to inactivity. Goodbye![/]");
+                    await Task.Delay(1000, CancellationToken.None); // Give time for the message to be sent
+                    break;
+                }
             }
         }
 
