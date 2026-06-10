@@ -15,10 +15,13 @@ namespace HIM.AiService.Controllers
             IRagService ragService,
             ILogger<ChatController> logger)
         {
-            _ragService = ragService;
-            _logger = logger;
+            _ragService = ragService ?? throw new ArgumentNullException(nameof(ragService));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
-
+        
+        /// <summary>
+        /// Refreshes and re-indexes the knoweledge base vectors.
+        /// </summary>
         [HttpPost("initialize")]
         public async Task<IActionResult> Initialize()
         {
@@ -37,22 +40,24 @@ namespace HIM.AiService.Controllers
             }
         }
 
+        /// <summary>
+        /// Process a portfolio inquiry and streams the AI's response in real-time
+        /// </summary>
+        /// <param name="request">The user's question.</param>
+        /// <param name="ct">Signals if the client has disconnected.</param>
         [HttpPost("ask")]
-        public async Task<IActionResult> Ask([FromBody] ChatRequest request)
+        public IAsyncEnumerable<string> Ask([FromBody] ChatRequest request, CancellationToken ct)
         {
-            try
+            if (string.IsNullOrWhiteSpace(request.Question))
             {
-                if (string.IsNullOrWhiteSpace(request.Question))
-                    return BadRequest("Question cannot be empty.");
+                _logger.LogWarning("Received and empty chat request.");
+                return AsyncEnumerable.Empty<string>();
+            }
 
-                var answer = await _ragService.AskAsync(request.Question);
-                return Ok(new { Answer = answer });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError($"{ex.Message}");
-                return StatusCode(500, ex.Message);
-            }
+            _logger.LogInformation("Synthesizing answer for inquiry: {Inquiry}", request.Question);
+
+            return _ragService.AskAsync(request.Question, ct);
+
         }
 
     }

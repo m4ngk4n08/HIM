@@ -43,21 +43,21 @@ The system follows a tiered architecture to ensure scalability and separation of
 ### Phase 1: AI Service & Knowledge Base (The "Brain") [COMPLETED]
 *   **Step 1.1:** Setup the .NET 10 AI Microservice.
 *   **Step 1.2:** Define the "Knowledge Base" (JSON containing experience, skills, and personality).
-*   **Step 1.3: Implement the RAG pipeline (Manual & Stable):**
+*   **Step 1.3: Implement the RAG pipeline (Manual & Stable):** [COMPLETED]
     *   **Chunking:** Extract logical, contextualized sections from the knowledge base.
     *   **Embeddings:** Use Ollama's `all-minilm` model via `HttpClient` for stable vector generation.
     *   **Vector Search:** Custom `VectorSearchService` using Cosine Similarity.
     *   **Orchestration:** Use Semantic Kernel (V1.77.0) for final prompt synthesis.
 *   **Step 1.4:** Integrate Llama3 via API to synthesize answers based on retrieved context.
 
-### Phase 2: The SSH Bridge (Gateway) [IN PROGRESS]
+### Phase 2: The SSH Bridge (Gateway) [COMPLETED]
 *   **Step 2.1:** Setup the .NET 10 `HIM.Gateway` project using `Microsoft.DevTunnels.Ssh`.
 *   **Step 2.2:** Implement **IHostKeyService** for persistent RSA/Ed25519 host key management.
 *   **Step 2.3:** Implement **IAuthenticationService** for "Guest" access handling.
 *   **Step 2.4:** Handle **PTY (pty-req)** and **Window Resize (window-change)** events to support responsive terminal UIs.
 *   **Step 2.5:** Implement the **Shell Bridge** to pipe terminal I/O to the future TUI application.
 
-### Phase 3: Terminal UI (TUI) Development
+### Phase 3: Terminal UI (TUI) Development [COMPLETED]
 *   **Step 3.1:** Implement a "Splash Screen" with ASCII art and a welcome message.
 *   **Step 3.2:** Build the Chat Interface:
     *   A scrollable history area.
@@ -65,7 +65,7 @@ The system follows a tiered architecture to ensure scalability and separation of
     *   Streamed output (character-by-character) for that "AI feel".
 *   **Step 3.3:** Add "Static" Views: Command-based navigation (e.g., type `/projects` to see a table of work, `/contact` for info).
 
-### Phase 4: Integration & Personality
+### Phase 4: Integration & Personality [IN PROGRESS]
 *   **Step 4.1:** Connect the TUI App to the AI Microservice via HTTP or gRPC.
 *   **Step 4.2:** Fine-tune the AI "System Prompt" to reflect your personality (e.g., professional but approachable, technical but witty).
 *   **Step 4.3:** Add Easter Eggs (e.g., hidden commands like `/matrix` or `/neofetch`).

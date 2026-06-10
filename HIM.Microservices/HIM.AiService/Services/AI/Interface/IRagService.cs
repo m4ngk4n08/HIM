@@ -3,6 +3,6 @@
     public interface IRagService
     {
         Task InitializeAsync();
-        Task<string> AskAsync(string question);
+        IAsyncEnumerable<string> AskAsync(string question, CancellationToken ct = default);
     }
 }
