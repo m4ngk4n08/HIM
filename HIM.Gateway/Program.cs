@@ -1,9 +1,13 @@
 using HIM.Gateway.Models;
+using HIM.Gateway.Services.ServiceModel;
 using HIM.Gateway.Services.SSH;
 using HIM.Gateway.Services.SSH.Interfaces;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
+using Polly;
+using Polly.Extensions.Http;
 
 // 1. Initialize the Application Builder
 // We use the Host.CreateApplicationBuilder to leverage built-in logging,
@@ -17,13 +21,28 @@ builder.Configuration.AddJsonFile("appsettings.json", optional: false, reloadOnC
 // 3. Service Registration (Dependency Injection)
 // Bind the SSH Settings from the configuration file to the SshSettings model.
 builder.Services.Configure<SshSettings>(builder.Configuration.GetSection("SshSettings"));
+builder.Services.Configure<AiServiceSettings>(builder.Configuration.GetSection("AiServiceSettings"));
 
 // Register infrastructure services as Singletons to maintain state (keys/auth/listener)
 builder.Services.AddSingleton<IHostKeyService, HostKeyService>();
 builder.Services.AddSingleton<IAuthenticationService, GuestAuthenticationService>();
 builder.Services.AddSingleton<ISshServerListener, SshServerListener>();
 builder.Services.AddSingleton<ITuiEngine, TuiEngine>();
+builder.Services.AddSingleton<ICommandService, CommandService>();
+builder.Services.AddSingleton<IConsoleEngineService, ConsoleEngineService>();
 
+
+// Resilient AI Client(Typed HttpClient Pattern)
+// Used AddHttpClient with a Retry Policy to handle transient network errors.
+builder.Services.AddHttpClient<IAiClientService, AiClientService>((sp, client) =>
+{
+    var settings = sp.GetRequiredService<IOptions<AiServiceSettings>>().Value;
+    client.BaseAddress = new Uri(settings.BaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+})
+.AddPolicyHandler(HttpPolicyExtensions
+.HandleTransientHttpError() // Handles 5xx and 408
+.WaitAndRetryAsync(3, retryAttemps => TimeSpan.FromSeconds(Math.Pow(2, retryAttemps))));
 
 // Build the service provider
 using IHost host = builder.Build();
@@ -46,7 +65,6 @@ var listener = host.Services.GetRequiredService<ISshServerListener>();
 
 try
 {
-
     // Start the listener in a non-blocking way
     var listenerTask = listener.StartAsync(cts.Token);
 

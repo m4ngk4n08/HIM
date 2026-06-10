@@ -26,7 +26,7 @@ namespace HIM.Gateway.Services.SSH
 
             // 3. Critical Step: Assign the completed Task to AuthenticationTask.
             // This signals to the library that authentication is sucessful;
-            e.AuthenticationTask = Task.FromResult(principal);
+            e.AuthenticationTask = Task.FromResult<ClaimsPrincipal?>(principal);
             
         }
     }

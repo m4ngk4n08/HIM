@@ -2,6 +2,7 @@
 using HIM.AiService.Services.AI.Interface;
 using Microsoft.Extensions.Options;
 using Microsoft.SemanticKernel;
+using System.Runtime.CompilerServices;
 
 namespace HIM.AiService.Services.AI
 {
@@ -30,33 +31,68 @@ namespace HIM.AiService.Services.AI
             await _kbService.InitializeAsync();
         }
 
-        public async Task<string> AskAsync(string question)
+        public async IAsyncEnumerable<string> AskAsync(string question, [EnumeratorCancellation] CancellationToken ct = default)
         {
-            // Get embedding for the question
-            var queryVector = await _embeddingService.GetEmbeddingAsync(question);
-            // Search for relevant chunks
-            var chunks = await _kbService.SearchAsync(queryVector);
-            var context = string.Join("\n", chunks.Select(c => c.Text));
+            // Setup phase(using a tuple-based result pattern for clean error handling)
+            var (context, error) = await TryGetContextAsync(question);
 
-            // Synthesize answer using the Kernel(Semantic kernel)
-            var prompt = $@"
-                You are Angelo's AI Portfolio Assistant. Use the following context to answer the user's question.
-                if the answer isn't in the context, be honest and say you don't know, but offer to provide his contact info.
-                
-                Maintain a professional, technical, yet witty 'Gen Z' tone.
+            if(error != null)
+            {
+                yield return $"[AI Service] {error}";
+                yield break;
+            }
 
-                Context:
-                {context}
+            // Synthesize phase (Direct streaming)
+            var prompt = BuildPrompt(context!, question);
+            var stream = _kernel.InvokePromptStreamingAsync(prompt, cancellationToken: ct);
 
-                User Question: {question}
-                Answer:
-        
-            ";
+            await foreach(var chunk in stream.WithCancellation(ct))
+            {
+                var content = chunk.ToString();
 
-            var result = await _kernel.InvokePromptAsync<string>(prompt);
-
-            return result.ToString() ?? "I'm sorry, I couldn't process that.";
+                if (!string.IsNullOrEmpty(content))
+                    yield return content;
+            }
         }
 
+        private string BuildPrompt(string context, string question)
+        {
+            try
+            {
+                return $@"
+                    You are Angelo's AI Portfolio Assistant. Use the following context to answer the user's question.
+                    if the answer isn't in the context, be honest and say you don't know, but offer to provide his contact info.
+                
+                    Maintain a professional, technical, yet witty 'Gen Z' tone. Prioritize users readability use bullet points highligts etc. .
+
+                    Context:
+                    {context}
+
+                    User Question: {question}
+                    Answer:
+        
+                ";
+            }
+            catch (Exception)
+            {
+
+                throw;
+            }
+        }
+
+        private async Task<(string? context, string? error)> TryGetContextAsync(string question)
+        {
+            try
+            {
+                var queryVector = await _embeddingService.GetEmbeddingAsync(question);
+                var chunks = await _kbService.SearchAsync(queryVector);
+
+                return (string.Join("\n", chunks.Select(j => j.Text)), null);
+            }
+            catch (Exception ex)
+            {
+                return (null, $"Knowledge retrieval failed: {ex.Message}");
+            }
+        }
     }
 }

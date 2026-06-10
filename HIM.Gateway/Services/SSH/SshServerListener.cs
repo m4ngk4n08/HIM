@@ -1,6 +1,7 @@
 ﻿using HIM.Gateway.Models;
 using HIM.Gateway.Services.SSH.Interfaces;
 using Microsoft.DevTunnels.Ssh;
+using Microsoft.DevTunnels.Ssh.Messages;
 using Microsoft.Extensions.Options;
 using System.Diagnostics;
 using System.Net;
@@ -106,6 +107,10 @@ namespace HIM.Gateway.Services.SSH
                 var hostKey = await _hostKeyService.GetHostKeyAsync();
                 session.Credentials = new[] { hostKey };
 
+                // !Adjustments: Precise Lifecycle Management: we will introduce a CancellationTokenSource linked to the session's lifecycle. This ensures that when a user disconnects, all background task(AI streaming, input loops) are terminated immidiately, preventing "Zombie Tasks."
+                using var sessionCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                session.Closed += (sender, e) => sessionCts.Cancel();
+
                 // 4. Hook up Session-level Authentication
                 session.Authenticating += (sender, e) =>
                 {
@@ -117,16 +122,16 @@ namespace HIM.Gateway.Services.SSH
                     if (e.Channel.ChannelType == "session")
                     {
                         // Call AcceptChannelAsync directly on the event argument:
-                        SshChannel channel = await e.Channel.Session.AcceptChannelAsync(cancellationToken);
+                        SshChannel channel = await e.Channel.Session.AcceptChannelAsync(sessionCts.Token);
 
                         // Hand off the open channel to the terminal worker
-                        _ = Task.Run(() => HandleShellChannelAsync(channel, cancellationToken));
+                        _ = Task.Run(() => HandleShellChannelAsync(channel, sessionCts.Token));
                     }
                 };
 
                 // 6. TCP stream to an SSH Session
                 using var stream = tcpClient.GetStream();
-                await session.ConnectAsync(stream, cancellationToken);
+                await session.ConnectAsync(stream, sessionCts.Token);
 
                 Console.WriteLine($"[Gateway] SSH Session negotiated for user: {session.Principal?.Identity?.Name}");
 
@@ -134,10 +139,7 @@ namespace HIM.Gateway.Services.SSH
                 var sessionClosedTcs = new TaskCompletionSource<bool>();
                 session.Closed += (sender, e) => sessionClosedTcs.TrySetResult(true);
 
-                using (cancellationToken.Register(() => sessionClosedTcs.TrySetResult(false)))
-                {
-                    await sessionClosedTcs.Task;
-                }
+                await sessionClosedTcs.Task;
 
                 Console.WriteLine("[Gateway] Connection closed cleanly.");
             }
@@ -147,108 +149,49 @@ namespace HIM.Gateway.Services.SSH
             }
         }
 
-        private void HandleShellChannelAsync(SshChannel channel, CancellationToken cancellationToken)
+        private void HandleShellChannelAsync(SshChannel channel, CancellationToken sessionToken)
         {
-            channel.Request += async (sender, e) =>
+            // Create a channel-scoped token linked to the session
+            var channelCts = CancellationTokenSource.CreateLinkedTokenSource(sessionToken);
+            channel.Closed += (s, e) => channelCts.Cancel();
+
+            uint terminalWidth = 80;
+            uint terminalHeight = 24;
+            channel.Request += (sender, e) =>
             {
-
-                if(e.RequestType == "pty-req" || e.RequestType == "env")
+                // SECURITY: Only allow terminal-related requests.
+                // Explicitly reject 'exec' and 'env' to prevent bypass attempts.
+                switch (e.RequestType)
                 {
-                    // Create an empty success response message
-                    Console.WriteLine("[Gateway] Success from HandleShellChannelAsyncMethod");
-                    e.IsAuthorized = true;
-                }
-                else if(e.RequestType == "shell")
-                {
-                    e.IsAuthorized = true;
+                    case "pty-req":
+                        e.IsAuthorized = true;
+                        // pty-req HAS the 'TERM' string, so ConvertTo works here
+                        var ptyMsg = e.Request.ConvertTo<TerminalRequestMessage>();
+                        if (ptyMsg != null)
+                        {
+                            terminalWidth = ptyMsg.Columns;
+                            terminalHeight = ptyMsg.Rows;
+                        }
+                        break;
+                    case "window-change":
+                        // [BUG] Window resizing is currently parked due to library-specific parsing issues.
+                        // We authorize the request to prevent client errors, but do not update dimensions.
+                        e.IsAuthorized = true;
+                        Console.WriteLine($"[Gateway] Received window-change request from {channel.Session.Principal?.Identity.Name}. Feature currently parked.");
+                        break;
 
-                    // Fire off interactive process loop in a background thread
-                    //_ = Task.Run(() => RunInteractiveProcessAsync(channel));
-                    _ = Task.Run(() => _tuiEngine.RunAsync(channel, cancellationToken));
-
-                    Console.WriteLine("[Gateway] Acknowledge success from HandleShellChannelAsyncMethod");
-                }
-                else
-                {
-                    e.IsAuthorized = false;
-                    Console.WriteLine("[Gateway] Rejected: unandled or unknown request");
+                    case "shell":
+                        e.IsAuthorized = true;
+                        if (e.RequestType == "shell")
+                            _ = Task.Run(() => _tuiEngine.RunAsync(channel, terminalWidth, terminalHeight, channelCts.Token));
+                        break;
+                    default:
+                        e.IsAuthorized = false;
+                        Console.WriteLine($"[Security] Rejected unauthorized {e.RequestType} request from {channel.Session.Principal?.Identity.Name}");
+                        break;
                 }
             };
         }
 
-        private async Task RunInteractiveProcessAsync(SshChannel channel)
-        {
-            // Wrap the channel inside an SshStream to expose standard ReadAsync / WriteAsync
-            using var sshStream = new SshStream(channel);
-
-            // Initialize a new OS background process instance
-            using var process = new Process();
-
-            // Configure the process start parameters dynamically based on the OS
-            process.StartInfo.FileName = OperatingSystem.IsWindows() ? "cmd.exe" : "/bin/bash";
-            process.StartInfo.Arguments = OperatingSystem.IsWindows() ? "" : "-1";
-
-            // Intercept standard I/O streams instead of letting them use the host
-            process.StartInfo.RedirectStandardInput = true;
-            process.StartInfo.RedirectStandardOutput = true;
-            process.StartInfo.RedirectStandardError = true;
-            process.StartInfo.UseShellExecute = false; // Required to allow stream redirect
-            process.StartInfo.CreateNoWindow = true; // Hidden background execution
-
-            // Launch the process; exit early if execution fails
-            if (!process.Start()) return;
-
-            // Create a cancellation engine boudn to the SSH Channel's lifecycle
-            using var cts = new CancellationTokenSource();
-            channel.Closed += (s, e) => cts.Cancel();
-
-            // Task 1 - Read from the SSH Client Network and Write to the Process Input
-            var incoming = Task.Run(async () =>
-            {
-                byte[] buffer = new byte[1024]; // 4KB chunk buffer allocation
-                while (!cts.Token.IsCancellationRequested)
-                {
-                    // Read incoming keystrokes/command from the SSH client network channel
-                    int read = await sshStream.ReadAsync(buffer, 0, buffer.Length, cts.Token);
-                    if (read <= 0) break;
-                    
-                    // DEBUG LOG: See if the server is actually getting your keystrokes
-                    Console.WriteLine($"[Debug] Received {read} bytes from SSH client.");
-                    await process.StandardInput.BaseStream.WriteAsync(buffer, 0, read, cts.Token);
-                    await process.StandardInput.BaseStream.FlushAsync(cts.Token);
-                }
-            });
-
-            // Task 2 - Read from the OS Process Output and Writeback to the ssh stream
-            var outgoing = Task.Run(async () =>
-            {
-                byte[] buffer = new byte[4096];
-                while (!cts.Token.IsCancellationRequested)
-                {
-                    int read = await process.StandardOutput.BaseStream.ReadAsync(buffer, 0, buffer.Length, cts.Token);
-                    if (read <= 0) break;
-                    
-
-                    await sshStream.WriteAsync(buffer, 0, read, cts.Token);
-                    await sshStream.FlushAsync(cts.Token);
-                }
-            });
-
-            var errorPump = Task.Run(async () =>
-            {
-                byte[] buffer = new byte[4096];
-                while (!cts.Token.IsCancellationRequested)
-                {
-                    int read = await process.StandardError.BaseStream.ReadAsync(buffer, 0, buffer.Length, cts.Token);
-                    if (read <= 0) break;
-
-                    await sshStream.WriteAsync(buffer, 0, read, cts.Token);
-                    await sshStream.FlushAsync(cts.Token);
-                }
-            });
-
-            await Task.WhenAny(incoming, outgoing, errorPump, process.WaitForExitAsync(cts.Token));
-            if (!process.HasExited) process.Kill();
-        }
     }
 }
