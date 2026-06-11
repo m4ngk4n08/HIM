@@ -38,7 +38,7 @@ builder.Services.AddHttpClient<IAiClientService, AiClientService>((sp, client) =
 {
     var settings = sp.GetRequiredService<IOptions<AiServiceSettings>>().Value;
     client.BaseAddress = new Uri(settings.BaseUrl);
-    client.Timeout = TimeSpan.FromSeconds(30);
+    client.Timeout = TimeSpan.FromMinutes(5);
 })
 .AddPolicyHandler(HttpPolicyExtensions
 .HandleTransientHttpError() // Handles 5xx and 408

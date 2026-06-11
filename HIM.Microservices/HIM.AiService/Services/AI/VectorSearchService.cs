@@ -1,29 +1,36 @@
 using HIM.AiService.Services.AI.Interface;
+using System.Numerics;
 
 namespace HIM.AiService.Services.AI
 {
     public class VectorSearchService : IVectorSearchService
     {
-        public double CalculateCosineSimilarity(float[] vector1, float[] vector2)
+        public float CalculateCosineSimilarity(ReadOnlySpan<float> a, ReadOnlySpan<float> b)
         {
-            if (vector1.Length != vector2.Length)
-                return 0;
+            if (a.Length != b.Length || a.Length == 0) return 0;
 
-            float dotProduct = 0;
-            float magnitude1 = 0;
-            float magnitude2 = 0;
+            float result = 0;
+            int i = 0;
+            int vCount = Vector<float>.Count;
 
-            for (int i = 0; i < vector1.Length; i++)
+            if(Vector.IsHardwareAccelerated && a.Length >= vCount)
             {
-                dotProduct += vector1[i] * vector2[i];
-                magnitude1 += vector1[i] * vector1[i];
-                magnitude2 += vector2[i] * vector2[i];
+                for(; i<= a.Length - vCount; i += vCount)
+                {
+                    var va = new Vector<float>(a.Slice(i));
+                    var vb = new Vector<float>(b.Slice(i));
+
+                    result += Vector.Dot(va, vb);
+                }
             }
 
-            if (magnitude1 == 0 || magnitude2 == 0)
-                return 0;
+            for(; i < a.Length; i++)
+            {
+                result += a[i] * b[i];
+            }
 
-            return dotProduct / (Math.Sqrt(magnitude1) * Math.Sqrt(magnitude2));
+            return result;
+
         }
     }
 }

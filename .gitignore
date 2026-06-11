@@ -29,15 +29,17 @@ bld/
 *.user
 *.userosscache
 *.sln.docstates
+*.bin
+
+# Secrets and Settings
+appsettings.json
+appsettings.Development.json
+*.secrets.json
 
 # .NET Core
 project.lock.json
 project.fragment.lock.json
 artifacts/
-
-# Secrets and Settings
-appsettings.Development.json
-*.secrets.json
 
 # Specialized folders
 .gemini/
