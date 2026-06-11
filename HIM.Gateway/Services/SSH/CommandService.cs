@@ -64,23 +64,41 @@ namespace HIM.Gateway.Services.SSH
 
             try
             {
-                // Show the spinner while waiting for the network/AI to respond
-                await console.Status()
+                // Initialize the stream but don't pull data yet
+                var responsesStream = _aiClientService.GetAiResponseAsync(question, ct);
+                await using var enumerator = responsesStream.GetAsyncEnumerator(ct);
+
+                // Show the spinner WHILE waiting for the first chunk to arrive.
+                bool hasData = await console.Status()
                     .Spinner(Spinner.Known.Dots)
-                    .StartAsync("Thinking...", async ctx =>
+                    .SpinnerStyle(Style.Parse("cyan1"))
+                    .StartAsync("Thinking..", async ctx =>
                     {
-                        // Wait for the first chunk to arrive to "break" the silence
-                        await Task.Delay(500, ct);
+                        // this keeps the spinner spinning until the AI actually responds;
+                        return await enumerator.MoveNextAsync();
                     });
 
-                await foreach (var chunk in _aiClientService.GetAiResponseAsync(question, ct))
+                if(hasData)
                 {
-                    console.Write(chunk);
+                    // Render the first chunk immediately
+                    console.Write(new Text(enumerator.Current));
+
+                    // Render the rest with a "typing" effect
+                    while(await enumerator.MoveNextAsync())
+                    {
+                        console.Write(new Text(enumerator.Current));
+
+                        // this tiny delay(20ms) creates the smooth typing animation
+                        // even if the network is fast or buffering;
+                        await Task.Delay(20, ct);
+                    }
                 }
             }
             catch (Exception ex)
             {
-                console.MarkupLine($"[red]Error communicating with AI Service: {ex.Message}");
+                // SENIOR FIX: Always .EscapeMarkup() on dynamic error strings
+                var safeMessage = ex.Message.EscapeMarkup();
+                console.MarkupLine($"[red]Error: {safeMessage}[/]");
             }
 
             console.WriteLine();

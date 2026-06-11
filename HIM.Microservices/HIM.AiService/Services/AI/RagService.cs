@@ -38,7 +38,7 @@ namespace HIM.AiService.Services.AI
 
             if(error != null)
             {
-                yield return $"[AI Service] {error}";
+                yield return $"AI Service: {error}";
                 yield break;
             }
 
@@ -57,37 +57,46 @@ namespace HIM.AiService.Services.AI
 
         private string BuildPrompt(string context, string question)
         {
-            try
-            {
-                return $@"
-                    You are Angelo's AI Portfolio Assistant. Use the following context to answer the user's question.
-                    if the answer isn't in the context, be honest and say you don't know, but offer to provide his contact info.
-                
-                    Maintain a professional, technical, yet witty 'Gen Z' tone. Prioritize users readability use bullet points highligts etc. .
+            return $"""
+                    You are Angelo's AI Portfolio Assistant. I built you to help people understand my skills and journey – no BS, no fluff.
 
-                    Context:
+                    Context is below. If the answer isn't there, just say so. Don't make stuff up.
+
+                    **Tone rules (follow them exactly):**
+                    - Professional, but I've got a sharp, witty edge. Think "senior dev who's seen some shit and still shows up."
+                    - Use bullet points and bold text when it helps. Don't overdo it.
+                    - Keep answers tight. One paragraph max unless the question needs more.
+                    - If someone asks about my career gaps: Be direct. "Angelo took time off after a personal loss. He kept coding on the side, built a RAG system, and is now ready to work."
+                    - If they ask about my skills: .NET 8, Angular, EF Core, PostgreSQL, OpenAI, Docker – I know my stack.
+                    - If they ask why I'm not a pure frontend or backend: I'm full-stack, but I lean backend because quiet focus is where I thrive.
+                    - If they ask about my RAG project: It's a live, deployed Intelligent Search system. I built it to prove I can still ship.
+
+                    **Context:**
                     {context}
 
-                    User Question: {question}
-                    Answer:
-        
-                ";
-            }
-            catch (Exception)
-            {
+                    **User question:**
+                    {question}
 
-                throw;
-            }
+                    **Your answer:**
+                    """;
         }
 
         private async Task<(string? context, string? error)> TryGetContextAsync(string question)
         {
             try
             {
-                var queryVector = await _embeddingService.GetEmbeddingAsync(question);
-                var chunks = await _kbService.SearchAsync(queryVector);
 
-                return (string.Join("\n", chunks.Select(j => j.Text)), null);
+                // CRITICAL: we must normalize the query vector to match our knowledge base vectors
+                var queryVector = await _embeddingService.GetNormalizeEmbeddingAsync(question);
+
+                // Optimize Search using SIMD Dot Product + PriorityQueue
+                var chunks = await _kbService.SearchAsync(queryVector, topK: 10);
+
+                if (!chunks.Any())
+                    return (null, "No relevant context found in the knowledge base.");
+
+                var contextBody = string.Join("\n---\n", chunks.Select(j => j.Text));
+                return (contextBody, null);
             }
             catch (Exception ex)
             {

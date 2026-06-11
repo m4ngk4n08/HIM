@@ -2,6 +2,6 @@ namespace HIM.AiService.Services.AI.Interface
 {
     public interface IVectorSearchService
     {
-        double CalculateCosineSimilarity(float[] vector1, float[] vector2);
+        float CalculateCosineSimilarity(ReadOnlySpan<float> vector1, ReadOnlySpan<float> vector2);
     }
 }

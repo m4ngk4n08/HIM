@@ -2,6 +2,7 @@
 using HIM.AiService.Services.AI.Interface;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
+using System.Xml.Linq;
 
 namespace HIM.AiService.Services.AI
 {
@@ -26,82 +27,144 @@ namespace HIM.AiService.Services.AI
         {
             if (_chunks.Any()) return;
 
-            // Load the JSON
-            var json = await File.ReadAllTextAsync(_settings.KnowledgeBase.FilePath);
-            var kb = JsonDocument.Parse(json);
-
-            // Simple Chunking Strategy: One chunk per logical section
-
-            var rawChunks = FlattenKnowledgeBase(kb.RootElement);
-
-            foreach (var text in rawChunks)
+            // Try load from Binary Cache(instant)
+            if(File.Exists(_settings.KnowledgeBase.CacheFile))
             {
-                var vector = await _embeddingService.GetEmbeddingAsync(text);
-                _chunks.Add(new KnowledgeChunks { Text  = text , Vector = vector });
+                await LoadCacheAsync();
+                return;
             }
+
+            // Cold Start: Process JSON
+            var json = await File.ReadAllTextAsync(_settings.KnowledgeBase.FilePath);
+            using var doc = JsonDocument.Parse(json);
+            var rawChunks = new List<string>();
+            FlattenJson(doc.RootElement, string.Empty, rawChunks);
+
+            foreach(var text in rawChunks)
+            {
+                var vector = await _embeddingService.GetNormalizeEmbeddingAsync(text);
+                _chunks.Add(new KnowledgeChunks { Text = text, Vector = vector });
+            }
+
+            // Save for next time
+            await SaveCacheAsync();
 
         }
 
-        private List<string> FlattenKnowledgeBase(JsonElement rootElement)
+        private async Task SaveCacheAsync()
         {
-            // Convert Json sections into descriptive strings
-            var chunks = new List<string>();
-
-            // Process personal information
-            if(rootElement.TryGetProperty("personal_info", out var personalInfo))
+            using var stream = File.Create(_settings.KnowledgeBase.CacheFile);
+            using var writer = new BinaryWriter(stream);
+            writer.Write(_chunks.Count);
+            foreach(var chunk in _chunks)
             {
-                chunks.Add($"Personal profile: {personalInfo.GetProperty("name").GetString()} is a {personalInfo.GetProperty("role").GetString()}. Summary: {personalInfo.GetProperty("summary").GetString()}");
-                chunks.Add($"Personality and Tone: {personalInfo.GetProperty("personality").GetString()}");
+                writer.Write(chunk.Text);
+                writer.Write(chunk.Vector.Length);
+                foreach (var val in chunk.Vector)
+                    writer.Write(val);
             }
+        }
 
-            // Process experience(Contextualize chunks)
-            if(rootElement.TryGetProperty("experience", out var experience))
+        private void FlattenJson(JsonElement element, string prefix, List<string> chunks)
+        {
+            switch (element.ValueKind)
             {
-                foreach(var job in experience.EnumerateArray())
-                {
-                    var company = job.GetProperty("company").GetString();
-                    var position = job.GetProperty("position").GetString();
-                    var duration = job.GetProperty("duration").GetString();
+                case JsonValueKind.Object:
+                    foreach (var prop in element.EnumerateObject())
+                    {
+                        string newPrefix = string.IsNullOrEmpty(prefix) ? prop.Name : $"{prefix} {prop.Name}";
+                        FlattenJson(prop.Value, newPrefix, chunks);
+                    }
+                    break;
 
-                    var highligts = string.Join(" ", job.GetProperty("highlights").EnumerateArray().Select(h => h.GetString()));
+                case JsonValueKind.Array:
+                    var items = element.EnumerateArray().ToList();
+                    if (!items.Any()) break;
 
-                    // Create a rich, self-contained sentence so the vector search is highly accurate
-                    chunks.Add($"Work experience at {company}: Role: {position} ({duration}). Highlights: {highligts}");
-                }
+                    // 1. If it's a simple list (like strings), join them.
+                    if (items.All(x => x.ValueKind != JsonValueKind.Object && x.ValueKind != JsonValueKind.Array))
+                    {
+                        chunks.Add($"{prefix}: {string.Join(", ", items.Select(x => x.ToString()))}");
+                    }
+                    // 2. If it's a list of OBJECTS (like Experience or Projects), consolidate each object!
+                    else
+                    {
+                        foreach (var item in items)
+                        {
+                            if (item.ValueKind == JsonValueKind.Object)
+                            {
+                                // CONSOLIDATION LOGIC:
+                                // Turn the whole job entry into one single high-context sentence.
+                                var builder = new List<string>();
+                                foreach (var prop in item.EnumerateObject())
+                                {
+                                    if (prop.Value.ValueKind == JsonValueKind.Array)
+                                    {
+                                        var subItems = string.Join("; ", prop.Value.EnumerateArray().Select(v => v.ToString()));
+                                        builder.Add($"{prop.Name}: {subItems}");
+                                    }
+                                    else
+                                    {
+                                        builder.Add($"{prop.Name}: {prop.Value}");
+                                    }
+                                }
+                                chunks.Add($"{prefix}: {string.Join(". ", builder)}");
+                            }
+                            else
+                            {
+                                FlattenJson(item, prefix, chunks);
+                            }
+                        }
+                    }
+                    break;
+
+                default:
+                    string val = element.ToString();
+                    if (!string.IsNullOrWhiteSpace(val)) chunks.Add($"{prefix}: {val}");
+                    break;
             }
+        }
 
-            // Process technical skills
-            if(rootElement.TryGetProperty("technical_skills", out var skills))
+        private async Task LoadCacheAsync()
+        {
+            using var stream = File.OpenRead(_settings.KnowledgeBase.CacheFile);
+            using var reader = new BinaryReader(stream);
+            int count = reader.ReadInt32();
+            for(int i = 0; i < count; i++)
             {
-                foreach(var category in skills.EnumerateObject())
-                {
-                    var categoryName = category.Name;
-                    var skillList = string.Join(" ", category.Value.EnumerateArray().Select(s => s.GetString()));
-                    chunks.Add($"Technical Skills - {categoryName}: {skillList}");
-                }
-            }
-            
-            // Process Education
-            if(rootElement.TryGetProperty("education", out var education))
-            {
-                chunks.Add($"Education {education.GetProperty("degree").GetString()} from {education.GetProperty("institution").GetString()}, graduated {education.GetProperty("graduation").GetString()}");
-            }
+                var text = reader.ReadString();
+                int vecLen = reader.ReadInt32();
+                var vec = new float[vecLen];
+                for (int j = 0; j < vecLen; j++)
+                    vec[j] = reader.ReadSingle();
 
-            return chunks;
+                _chunks.Add(new KnowledgeChunks { Text = text, Vector = vec });
+            }
         }
 
         public async Task<List<KnowledgeChunks>> SearchAsync(float[] queryEmbedding, int topK = 3)
         {
-            return _chunks
-                .Select(chunk => new
-                {
-                    Chunk = chunk,
-                    Similarity = _vectorsearchService.CalculateCosineSimilarity(queryEmbedding, chunk.Vector)
-                })
-                .OrderByDescending(x => x.Similarity)
-                .Take(topK)
-                .Select(j => j.Chunk)
-                .ToList();
+            if (!_chunks.Any())
+            {
+                await InitializeAsync();
+            }
+
+            if (!_chunks.Any()) return new List<KnowledgeChunks>();
+
+            // Use PriorityQueue for O(N log k)
+            var pq = new PriorityQueue<KnowledgeChunks, float>();
+
+            foreach (var chunk in _chunks)
+            {
+                float similarity = _vectorsearchService.CalculateCosineSimilarity(queryEmbedding, chunk.Vector);
+                pq.Enqueue(chunk, similarity); // Negative because PriorityQueue is a Min-Heap by default
+
+                if (pq.Count > topK) pq.Dequeue();
+            }
+
+            var results = new List<KnowledgeChunks>();
+            while (pq.Count > 0) results.Insert(0, pq.Dequeue());
+            return results;
         }
     }
 }

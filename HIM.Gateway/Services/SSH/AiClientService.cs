@@ -34,7 +34,7 @@ namespace HIM.Gateway.Services.SSH
 
             if (!response.IsSuccessStatusCode)
             {
-                yield return $"[Gateway Error] AI Service returned{response.StatusCode}";
+                yield return $"Gateway Error: {response.StatusCode}";
                 yield break;
             }
 
