@@ -1,6 +1,8 @@
 using HIM.AiService.Models.AI;
 using HIM.AiService.Services.AI.Interface;
 using Microsoft.Extensions.Options;
+using Microsoft.ML.OnnxRuntime;
+using Microsoft.ML.Tokenizers;
 using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -9,9 +11,11 @@ namespace HIM.AiService.Services.AI
 {
     public class EmbeddingService : IEmbeddingService
     {
-        private readonly HttpClient _httpClient;
-        private readonly IVectorSearchService _vectorSearchService;
         private readonly AiSettings _settings;
+        private readonly HttpClient _httpClient;
+        private readonly InferenceSession _session;
+        private readonly Tokenizer _tokenizer;
+        private readonly IVectorSearchService _vectorSearchService;
 
         public EmbeddingService(
             HttpClient httpClient,
@@ -21,6 +25,8 @@ namespace HIM.AiService.Services.AI
             _httpClient = httpClient;
             _vectorSearchService = vectorSearchService;
             _settings = settings.Value;
+            _tokenizer = BertTokenizer.Create(_settings.Onnx.Tokenizer);
+            _session = new InferenceSession(_settings.Onnx.Model);
         }
 
         public async Task<float[]> GetNormalizeEmbeddingAsync(string text)
@@ -44,6 +50,12 @@ namespace HIM.AiService.Services.AI
             }
 
             return embedding;
+        }
+
+        public Task<float[]> GetNormalizeLocalEmbeddingAsync(string text)
+        {
+            var encoded = _tokenizer.EncodeToIds(text);
+            var tokens = encoded.ids
         }
 
         /// <summary>

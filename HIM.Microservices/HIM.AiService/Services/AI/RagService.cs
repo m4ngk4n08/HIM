@@ -11,6 +11,7 @@ namespace HIM.AiService.Services.AI
         private readonly Kernel _kernel;
         private readonly IEmbeddingService _embeddingService;
         private readonly IKnowledgeBaseService _kbService;
+        private readonly AiSettings _settings;
 
         public RagService(
             IEmbeddingService embeddingService,
@@ -19,9 +20,26 @@ namespace HIM.AiService.Services.AI
         {
             _embeddingService = embeddingService;
             _kbService = kbService;
+            _settings = settings.Value;
 
             var builder = Kernel.CreateBuilder();
-            builder.AddOllamaChatCompletion(settings.Value.Ollama.ModelId, new Uri(settings.Value.Ollama.BaseUrl));
+            
+            if(_settings.ChatProvider.Equals("Groq", StringComparison.OrdinalIgnoreCase))
+            {
+                // REDIRECT: Use OpenAI connector to talk to Groq
+                builder.AddOpenAIChatCompletion(
+                    modelId: _settings.Groq.ModelId,
+                    apiKey: _settings.Groq.ApiKey,
+                    endpoint: new Uri(_settings.Groq.Endpoint)
+                    );
+            }
+            else
+            {
+                builder.AddOllamaChatCompletion(
+                    _settings.Ollama.ModelId, 
+                    new Uri(_settings.Ollama.BaseUrl));
+            }
+
 
             _kernel = builder.Build();
         }
@@ -85,9 +103,18 @@ namespace HIM.AiService.Services.AI
         {
             try
             {
+                float[] queryVector;
+
 
                 // CRITICAL: we must normalize the query vector to match our knowledge base vectors
-                var queryVector = await _embeddingService.GetNormalizeEmbeddingAsync(question);
+                if (_settings.ChatProvider.Equals("Groq", StringComparison.OrdinalIgnoreCase))
+                {
+                    queryVector = await _embeddingService.GetNormalizeLocalEmbeddingAsync(question);
+                }
+                else
+                {
+                    queryVector = await _embeddingService.GetNormalizeEmbeddingAsync(question);
+                }
 
                 // Optimize Search using SIMD Dot Product + PriorityQueue
                 var chunks = await _kbService.SearchAsync(queryVector, topK: 10);

@@ -35,6 +35,7 @@ bld/
 appsettings.json
 appsettings.Development.json
 *.secrets.json
+HIM.Microservices/HIM.AiService/knowledge-base.json
 
 # .NET Core
 project.lock.json

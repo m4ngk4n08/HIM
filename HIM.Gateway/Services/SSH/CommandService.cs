@@ -1,7 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Text.Json;
+using System.Threading.Tasks.Dataflow;
+using HIM.Gateway.Models;
+using HIM.Gateway.Models.Knowledge;
 using HIM.Gateway.Services.SSH.Interfaces;
+using Microsoft.Extensions.Options;
 using Spectre.Console;
 
 namespace HIM.Gateway.Services.SSH
@@ -9,48 +14,60 @@ namespace HIM.Gateway.Services.SSH
     public class CommandService : ICommandService
     {
         private readonly IAiClientService _aiClientService;
+        private readonly KnowledgeBaseSettings _kbSettings;
+        private PortfolioData? _data;
 
-        public CommandService(IAiClientService aiClientService)
+        public CommandService(
+            IAiClientService aiClientService,
+            IOptions<KnowledgeBaseSettings> kbSettings)
         {
             _aiClientService = aiClientService;
+            _kbSettings = kbSettings.Value;
+            LoadKnowledgeBase();
+        }
+
+        private void LoadKnowledgeBase()
+        {
+            try
+            {
+                if (!File.Exists(_kbSettings.FilePath)) return;
+
+                var json = File.ReadAllText(_kbSettings.FilePath);
+                _data = JsonSerializer.Deserialize<PortfolioData>(json, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Internal error: KB load failed: {ex.Message}");
+            }
         }
 
         public async Task ProcessCommandAsync(IAnsiConsole console, string command, CancellationToken ct)
         {
             if (string.IsNullOrWhiteSpace(command)) return;
 
+            if(_data == null)
+            {
+                console.MarkupLine($"[red]Error:[/] Knowledge base file not found or corrupted.");
+                return;
+            }
+
             var table = new Table();
 
             switch (command.ToLower())
             {
-                case "/help":
-                    ShowHelp(console, table);
-                    break;
-
-                case "/projects":
-                    ShowProjects(console, table);
-                    break;
-
-                case "/about":
-                    ShowAbout(console);
-                    break;
-
-                case "/skills":
-                    ShowSkills(console);
-                    break;
-
-                case "/experience":
-                    ShowExperience(console);
-                    break;
-
-                case "/clear":
-                    console.Clear();
-                    break;
-
+                case "/help": ShowHelp(console, table); break;
+                case "/projects": ShowProjects(console, table); break;
+                case "/about": ShowAbout(console); break;
+                case "/skills": ShowSkills(console, table); break;
+                case "/experience": ShowExperience(console); break;
+                case "/clear": console.Clear();break;
                 case "/exit":
                     console.MarkupLine("[red]Closing connection... Goodbye![/]");
                     throw new OperationCanceledException();
-
                 default:
                     await HandleAiChatAsync(console, command, ct);
                     break;
@@ -107,147 +124,78 @@ namespace HIM.Gateway.Services.SSH
 
         private void ShowExperience(IAnsiConsole console)
         {
-            console.WriteLine();
+            var tree = new Tree("[bold yellow]CAREER JOURNEY[/]").Guide(TreeGuide.Line);
 
-            // Create the root of the tree
-            var root = new Tree("[bold yellow]CAREER JOURNEY[/]")
-                .Style("grey")
-                .Guide(TreeGuide.Line);
+            foreach (var job in _data!.Experiences)
+            {
+                var node = tree.AddNode(
+                    $"[bold cyan]{job.Position?.EscapeMarkup()}[/] @ " +
+                    $"[white]{job.Company?.EscapeMarkup()}[/] " +
+                    $"[grey]({job.Duration?.EscapeMarkup()})[/]");
+                foreach (var highlights in job.Highlights)
+                {
+                    node.AddNode(highlights.EscapeMarkup());
+                }
+            }
 
-            // Add company branches
-            var current = root.AddNode("[bold cyan]Senior Full-Stack Engineer @ TechCorp[/] [grey](Present)[/]");
-            current.AddNode("Architecting [green]distributed microservices[/] using .NET 10 and gRPC.");
-            current.AddNode("Implementing a [yellow]RAG-based AI system[/] for internal knowledge management.");
-            current.AddNode("Optimized system latency by [bold white]35%[/] through custom caching strategies.");
-
-            // --- Role 2 ---
-            var previous = root.AddNode("[bold white]Software Developer @ InnovationHub[/] [grey](2021 - 2023)[/]");
-            previous.AddNode("Developed and maintained mission-critical [blue]ERP solutions[/].");
-            previous.AddNode("Migrated legacy monolithic apps to [magenta]Dockerized containers[/].");
-            previous.AddNode("Led a team of 3 developers for a [green]real-time analytics[/] dashboard.");
-
-            // --- Role 3 ---
-            var startup = root.AddNode("[bold white]Junior Dev @ StartUp Labs[/] [grey](2019 - 2021)[/]");
-            startup.AddNode("Built interactive front-end components using [blue]React[/] and [cyan]TypeScript[/].");
-            startup.AddNode("Integrated third-party [yellow]Stripe APIs[/] for payment processing.");
-
-            // render tree
-            console.Write(root);
-            console.WriteLine();
+            console.Write(tree);
         }
 
-        private void ShowSkills(IAnsiConsole console)
+        private void ShowSkills(IAnsiConsole console, Table table)
         {
-            console.WriteLine();
+            table.Border(TableBorder.Rounded).Title("[bold blue]TECH STACK[/]");
+            table.AddColumn("Category").AddColumn("Technologies");
 
-            var chart = new BarChart()
-                .Width(60)
-                .Label("[bold blue]CORE TECHNICAL PROFICIENCIES[/]")
-                .CenterLabel();
-
-            // Adding items with values out of 100 for a clean percentage look
-            chart.AddItem("C# / .NET 10", 95, Color.Cyan1);
-            chart.AddItem("System Architecture", 85, Color.Blue);
-            chart.AddItem("AI / RAG Pipelines", 80, Color.Yellow);
-            chart.AddItem("Cloud / DevOps", 75, Color.Green);
-            chart.AddItem("Terminal UIs", 90, Color.Magenta1);
-
-            console.Write(chart);
-            console.WriteLine();
+            foreach (var category in _data!.TechnicalSkills)
+            {
+                table.AddRow(
+                    $"[yellow]{char.ToUpper(category.Key[0]) + category.Key[1..]}[/]",
+                    string.Join(", ", category.Value)
+                    );
+            }
+            console.Write(table);
         }
 
         private void ShowHelp(IAnsiConsole console, Table table)
         {
-            table
-            .Border(TableBorder.Rounded)
-            .BorderColor(Color.Gray)
-            .Title("[yellow]AVAILABLE COMMANDS[/]")
-            .Expand();
-
-            table.AddColumn("[cyan]Command[/]");
-            table.AddColumn("[white]Description[/]");
-
-            table.AddRow("/about", "Who is Angelo?");
-            table.AddRow("/projects", "Display list of technical projects.");
-            table.AddRow("/skills", "Display list of technical technical skills.");
-            table.AddRow("/experience", "Display list of career experiences.");
-            table.AddRow("/clear", "Reset the terminal view.");
-            table.AddRow("/exit", "Terminate the SSH connection.");
-
+            table.Border(TableBorder.Rounded).Title("[yellow]COMMANDS[/]");
+            table.AddColumn("Command").AddColumn("Description");
+            table.AddRow("/about", "Personal profile").AddRow("/experience", "Work history")
+                .AddRow("/skills", "Tech Stack").AddRow("/projects", "Live projects")
+                .AddRow("/clear", "Clear screen").AddRow("/exit", "Logout");
             console.Write(table);
         }
 
         private void ShowProjects(IAnsiConsole console, Table table)
         {
-            console.WriteLine();
-                table 
-               .Border(TableBorder.DoubleEdge)
-               .BorderColor(Color.Cyan1)
-               .Title("[bold white]TECHNICAL PROJECTS[/]")
-               .Caption("[grey]Type a project name to ask the AI for more details[/]");
+            table.Border(TableBorder.DoubleEdge).Title("[bold white]PROJECTS[/]");
+            table.AddColumn("[yellow]Name[/]").AddColumn("[yellow]Stack[/]").AddColumn("[yellow]Status[/]");
 
-            table.AddColumn("[yellow]Project Name[/]");
-            table.AddColumn("[yellow]Tech Stack[/]");
-            table.AddColumn("[yellow]Status[/]");
-
-            table.AddRow(
-                "[bold]HIM Gateway[/]",
-                "C#, .NET 10, SSH, Spectre.Console",
-                "[green]Active[/]");
-
-            table.AddRow(
-                "[bold]Neural-RAG Service[/]",
-                "Python, FastAPI, Llama3, Ollama",
-                "[blue]Completed[/]");
-
-            table.AddRow(
-                "[bold]Heuristic-Shared[/]",
-                "gRPC, Protobuf, Shared Architecture",
-                "[yellow]Beta[/]");
+            foreach(var proj in _data!.Projects)
+            {
+                table.AddRow($"[bold]{proj.Name}[/]", proj.Stack, $"[green]{proj.Status}[/]");
+            }
 
             console.Write(table);
-            console.WriteLine();
+
         }
 
         private void ShowAbout(IAnsiConsole console)
         {
-            console.WriteLine();
-
-            // Create the bio text
-            var bio = new Markup(
-                "I am a [cyan]Full-Stack Engineer[/] specialized in building [yellow]distributed systems[/] and " +
-                "intelligent automation. My focus is on creating technical experiences that are not just functional, " +
-                "but visually and architecturally elegant.\n\n" +
-                "[grey]- 5+ Years in .NET Ecosystem[/]\n" +
-                "[grey]- RAG & AI Integration Enthusiast[/]\n" +
-                "[grey]- SSH & Terminal UI Advocate[/]"
-                );
-
-            // Create a small grid for "System Info" stats
-            var stats = new Grid();
-            stats.AddColumn();
-            stats.AddColumn();
-            stats.AddRow("[grey]Location:[/]", "[white]Manila, PH[/]");
-            stats.AddRow("[grey]Availability:[/]", "[green]Open for Innovation[/]");
-            stats.AddRow("[grey]Primary Language:[/]", "[blue]C# / TypeScript[/]");
-
-            // Combine into a layout(using rows)
+            var p = _data!.PersonalInfo;
             var layout = new Rows(
-                bio,
+                new Markup($"[cyan]{p.Summary}[/]\n"),
                 new Rule().RuleStyle("grey"),
-                stats
+                new Grid()
+                    .AddColumn().AddColumn()
+                    .AddRow("[grey]Location:[/]", $"[white]{p.Location}[/]")
+                    .AddRow("[grey]GitHub:[/]", $"[blue]{p.Contact.GetValueOrDefault("github", "N/A")}[/]")
                 );
 
-            // Wrap everything in a polished Panel
-            var panel = new Panel(layout)
-                .Header("[bold cyan] PROFILE: ANGELO [/]")
-                .Border(BoxBorder.Rounded)
-                .BorderColor(Color.Cyan1)
-                .Padding(1, 1, 1, 1)
-                .Expand();
-
-            console.Write(panel);
-            console.WriteLine();
+            console.Write(new Panel(layout)
+                .Header($"[bold cyan] {p.Name.ToUpper()} // {p.Role.ToUpper()} [/]")
+                .Border(BoxBorder.Rounded).BorderColor(Color.Cyan1).Expand());
+                
         }
     }
 }
