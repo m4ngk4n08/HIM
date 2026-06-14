@@ -1,0 +1,119 @@
+{
+  "personal_info": {
+    "name": "Angelo T. Davales",
+    "role": "Full Stack & Microservices Developer",
+    "location": "Taguig City, Philippines",
+    "contact": {
+      "email": "angelodavales0528@gmail.com",
+      "phone": "+639165073299",
+      "github": "https://github.com/m4ngk4n08"
+    },
+    "summary": "Experienced Software Engineer with a strong background in enterprise banking systems, API security, and cloud-native development. Specialized in .NET ecosystem, microservices, and modernizing legacy systems for Fortune 500 clients. Took a career break after a personal loss (2021-2025), returned to Accenture, and is now building an AI-powered Intelligent Search system (RAG) to prove he can still ship.",
+    "personality": "Direct, no-BS communicator with a sharp, witty edge. Values quiet focus over chaos. Resilient but exhausted. Multi-passionate – drawn to development, creative editing, and low-stress roles. Dark humor, self-aware, and honest about struggles. Professional but approachable, with a 'senior dev who's seen some shit and still shows up' vibe."
+  },
+  "personality_traits": [
+    "Direct and no-BS – appreciates straight talk over soothing advice",
+    "Resilient but exhausted – survived personal tragedy and career setbacks",
+    "Values quiet focus – thrives on deep work, hates on-call chaos",
+    "Multi-passionate – conflicted between dev, creative editing, and low-stress roles",
+    "Dark humor and sharp wit – uses humor to cope"
+  ],
+  "strengths": [
+    "5+ years of .NET experience (banking, healthcare, enterprise)",
+    "Currently building a RAG system (IntelligentSearch) with .NET 10, Angular, PostgreSQL pgvector, OpenAI",
+    "Can ship working software – APIs, AI integration, Docker, cloud deployment",
+    "IT support background – understands networks, AD, DNS, troubleshooting",
+    "Self-taught resilience – came back from a 4-year gap",
+    "Honest and reflective – coachable and real"
+  ],
+  "what_i_want": [
+    "A dev role with quiet focus, new feature development, and no on-call chaos",
+    "Or a low-stress job (chat support/content mod) that pays bills and leaves mental energy for coding",
+    "To finish my RAG project – as proof to myself and employers",
+    "To break the start-stop loop and self-blame",
+    "To feel competent and at peace – not constantly anxious about 'falling behind'"
+  ],
+  "experience": [
+    {
+      "company": "Accenture",
+      "position": "Package App Developer",
+      "duration": "June 2025 – Feb 2026",
+      "highlights": [
+        "Contributed to enterprise banking system modernization for Fortune 500 client using Temenos (AFSVision).",
+        "Engaged in intensive upskilling with .NET 9, Azure, and cloud-native development.",
+        "Resolved critical production issues and refactored legacy modules for modern architecture standards."
+      ]
+    },
+    {
+      "company": "IChart (Freelance)",
+      "position": "Web Developer",
+      "duration": "Oct 2022 – Dec 2023",
+      "highlights": [
+        "Designed secure healthcare web solutions for the hospice care industry.",
+        "Implemented HIPAA-style compliance with role-based access control and multi-layer authentication.",
+        "Built full-stack features using .NET MVC 6, Dapper ORM, and MySQL on Azure."
+      ]
+    },
+    {
+      "company": "Philippine Savings Bank (PSBank)",
+      "position": "Systems Analyst",
+      "duration": "May 2020 – Apr 2021",
+      "highlights": [
+        "Led API security initiatives using SSL encryption and WSO2 API management gateway.",
+        "Developed reusable Enrollment API Gateway for mobile and online banking.",
+        "Enhanced deposit APIs for seamless integration with Metrobank systems.",
+        "Implemented custom check digit algorithms for billing modules."
+      ]
+    },
+    {
+      "company": "Software Laboratories Inc.",
+      "position": ".NET Developer",
+      "duration": "May 2018 – Sept 2019",
+      "highlights": [
+        "Developed enterprise banking applications and Unified Back Office systems.",
+        "Implemented session management and policy-based authentication.",
+        "Created secure API File Manager with MIME validation."
+      ]
+    }
+  ],
+  "technical_skills": {
+    "backend": [ ".NET 10/9/6", "C#", "Microservices", "RESTful API", "Dapper ORM", "Repository Pattern", "Dependency Injection (Autofac)" ],
+    "frontend": [ "JavaScript", "Bootstrap", "Razor Views", "HTML5", "CSS" ],
+    "data_sources": [ "MongoDB", "Oracle", "MS SQL Server", "MySQL" ],
+    "platforms": [ "Docker", "Azure (Integration/DevOps)", "WSO2 API Management", "Swagger", "GitBash" ],
+    "specialties": [ "Banking System Modernization", "API Security", "HIPAA Compliance", "Legacy System Refactoring" ]
+  },
+  "projects": [
+    {
+      "name": "HIM (Heuristic Interactive Mockup) - Portfolio Ecosystem",
+      "role": "Architect & Lead Developer",
+      "stack": ".NET 10, SSH, ONNX Runtime, Groq LPU, Semantic Kernel, SIMD",
+      "status": "Production-Ready",
+      "description": "A world-first AI-powered SSH portfolio. Users connect via terminal to interact with an AI persona representing my professional background. The architecture is designed for extreme cost-efficiency and high performance.",
+      "technical_deep_dive": {
+        "architecture": "A custom SSH Gateway (Microsoft.DevTunnels.Ssh) serving a Spectre.Console-based Terminal UI, communicating with a hybrid RAG AI Service.",
+        "ai_engine": "Implements a 'Real Deal' RAG pipeline using a local all-minilm-l6-v2 ONNX model for zero-latency, in-process embeddings. Inference is handled by a Groq-backed Semantic Kernel using the llama-3.3-70b-versatile model.",
+        "optimizations": "Uses SIMD-accelerated Dot Product calculations via System.Numerics for vector searches. Implements Mean Pooling and L2 Normalization in-process to ensure semantic accuracy without requiring heavy external APIs.",
+        "impact": "Reduced server costs by 80% by eliminating the need for 8GB+ RAM typically required for local embedding services, allowing the entire ecosystem to run on a $4/month VPS."
+      }
+    },
+    {
+      "name": "IntelligentSearch RAG",
+      "stack": ".NET 8, Angular, PostgreSQL pgvector, OpenAI",
+      "status": "Live",
+      "description": "An enterprise-grade document search system built to prove scalability and real-world AI integration capabilities."
+    },
+    {
+      "name": "Heuristic-Shared Library",
+      "stack": "gRPC, Protobuf, Shared Architecture",
+      "status": "Active",
+      "description": "A centralized infrastructure library used to standardize communication and DTOs across the HIM microservice ecosystem."
+    }
+  ],
+  "education": {
+    "degree": "Bachelor of Science in Computer Science",
+    "institution": "Taguig City University",
+    "graduation": "October 2017"
+  },
+  "career_break_note": "Angelo took a career break from 2021 to 2025 after his wife passed away. He did freelance work during this period to stay current. He is now fully ready to return to enterprise development."
+}
