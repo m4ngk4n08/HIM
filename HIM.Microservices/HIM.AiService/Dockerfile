@@ -15,8 +15,9 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 COPY --from=build /app/publish .
 
-#IMPORTANT: Ensure 'models' folder is copied to the runtime image
-COPY models/ ./models/
+# Explicitly copy data and models into the final container
+COPY knowledge-base.json .
+COPY Models/ ./Models/
 
 # Expose the internal API port
 EXPOSE 8080

@@ -13,6 +13,7 @@ using Polly.Extensions.Http;
 var builder = Host.CreateApplicationBuilder(args);
 
 builder.Configuration.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
+builder.Configuration.AddEnvironmentVariables(); // Ensure environment variables override appsettings.json
 
 builder.Services.Configure<SshSettings>(builder.Configuration.GetSection("SshSettings"));
 builder.Services.Configure<AiServiceSettings>(builder.Configuration.GetSection("AiServiceSettings"));

@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+option csharp_namespace = "HIM.Shared";
+
+package heuristic;
+
+service TerminalTunnel {
+	// Bi-directional stream:
+	// Client (Entry) sends TerminalRequest (keys/window)
+	// Server(TUI) sends TerminalResponse (ANSI text)
+	rpc OpenTunnel(stream TerminalRequest) returns (stream TerminalResponse)
+}
+
+message TerminalRequest {
+	oneof payload {
+		bytes data = 1; // Raw keystrokes
+		WindowSize window = 2; // Terminal Dimension
+	}
+}
+
+message WindowSize{
+	uint32 width = 1;
+	uint32 height = 2;	
+}
+
+message TerminalResponse {
+	bytes data = 1; // Raw ANSI Characters for the screen
+}
