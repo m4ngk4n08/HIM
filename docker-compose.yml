@@ -1,19 +1,31 @@
-version: '3.8'
-
 services:
   him-ai:
     build:
-      context: ./HIM.Microservices/HIM.AiServices
+      context: ./HIM.Microservices/HIM.AiService
     restart: always
-    # No ports exposed. this stays private.
+    environment:
+      - AiSettings__ChatProvider=Groq
+      - AiSettings__Groq__ApiKey=${GROQ_API_KEY}
+      - AiSettings__Groq__ModelId=llama-3.3-70b-versatile
+      - AiSettings__Groq__Endpoint=https://api.groq.com/openai/v1
+      - LANG=en_US.UTF-8
+      - LC_ALL=en_US.UTF-8
+    volumes:
+      - ./cache:/app/cache
+      - ./HIM.Microservices/HIM.AiService/knowledge-base.json:/app/knowledge-base.json
   
   him-gateway:
     build:
       context: ./HIM.Gateway
     ports:
-      - "22:22" # Public port 22 -> docker port 22
+      - "2222:22" # Public port 2222 -> docker port 22
     environment:
+      - SshSettings__Port=22
       - AiServiceSettings__BaseUrl=http://him-ai:8080
+      - TERM=xterm-256color
+      - DOTNET_SYSTEM_CONSOLE_ALLOW_ANSI_COLOR_REDIRECTION=true
+      - LANG=en_US.UTF-8
+      - LC_ALL=en_US.UTF-8
     depends_on:
       - him-ai
     restart: always

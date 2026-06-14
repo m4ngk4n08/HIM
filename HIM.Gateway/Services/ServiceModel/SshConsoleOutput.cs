@@ -16,10 +16,15 @@ namespace HIM.Gateway.Services.ServiceModel
         private readonly SshTextWriter _sshWriter;
         public TextWriter Writer => _sshWriter;
         public bool IsTerminal => true;
-        public int Width => 80;
-        public int Height => 24;
+        public int Width { get; }
+        public int Height { get; }
 
-        public SshConsoleOutput(SshTextWriter writer) => _sshWriter = writer;
+        public SshConsoleOutput(SshTextWriter writer, int width, int height)
+        {
+            _sshWriter = writer;
+            Width = width > 0 ? width : 80;
+            Height = height > 0 ? height : 24;
+        }
 
         /// <summary>
         /// Complies with the IAnsiConsoleOutput contract to sync character encoding.

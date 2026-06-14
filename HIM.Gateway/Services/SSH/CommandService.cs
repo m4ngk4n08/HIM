@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks.Dataflow;
@@ -16,6 +17,10 @@ namespace HIM.Gateway.Services.SSH
         private readonly IAiClientService _aiClientService;
         private readonly KnowledgeBaseSettings _kbSettings;
         private PortfolioData? _data;
+        private readonly ConditionalWeakTable<IAnsiConsole, UserCooldownState> _cooldowns = new();
+        private readonly TimeSpan _cooldownDuration = TimeSpan.FromSeconds(3);
+
+        private class UserCooldownState { public DateTime LastQuery { get; set; } }
 
         public CommandService(
             IAiClientService aiClientService,
@@ -69,9 +74,29 @@ namespace HIM.Gateway.Services.SSH
                     console.MarkupLine("[red]Closing connection... Goodbye![/]");
                     throw new OperationCanceledException();
                 default:
+                    if(IsRateLimited(console))
+                    {
+                        console.MarkupLine("[yellow]![/] [grey]Neural Link is cooling down.. please wait");
+                        break;
+                    }
                     await HandleAiChatAsync(console, command, ct);
                     break;
             }
+        }
+
+        private bool IsRateLimited(IAnsiConsole console)
+        {
+            // Get or create the state for this specific user
+            var state = _cooldowns.GetOrCreateValue(console);
+            var now = DateTime.UtcNow;
+
+            if(now - state.LastQuery < _cooldownDuration)
+            {
+                return true; // still in cooldown
+            }
+
+            state.LastQuery = now;
+            return false;
         }
 
         private async Task HandleAiChatAsync(IAnsiConsole console, string question, CancellationToken ct)

@@ -33,15 +33,19 @@ namespace HIM.Gateway.Services.SSH
             {
                 Ansi = AnsiSupport.Yes,
                 ColorSystem = ColorSystemSupport.TrueColor,
-                Out = new SshConsoleOutput(new SshTextWriter(stream)),
+                Out = new SshConsoleOutput(new SshTextWriter(stream, Encoding.UTF8), (int)width, (int)height), 
                 Interactive = InteractionSupport.Yes
             };
 
             var console = AnsiConsole.Create(settings);
 
-            // Synchronize the Spectre Profile with the terminal dimensions
+            // Force absolute width/height detection
             console.Profile.Width = (int)(width > 0 ? width : DefaultWidth);
             console.Profile.Height = (int)(height > 0 ? height : DefaultHeight);
+            console.Write($"width: {console.Profile.Width}, height: {console.Profile.Height}");
+            
+            // Critical for Alignment: Enable UTF8 for the profile
+            console.Profile.Capabilities.Unicode = true;
 
             return console;
         }

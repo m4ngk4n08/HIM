@@ -12,6 +12,8 @@ builder.Services.AddServices();
 
 builder.Services.AddControllers();
 
+builder.Configuration.AddEnvironmentVariables();
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())

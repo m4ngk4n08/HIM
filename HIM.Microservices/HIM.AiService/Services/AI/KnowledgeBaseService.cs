@@ -42,7 +42,7 @@ namespace HIM.AiService.Services.AI
 
             foreach(var text in rawChunks)
             {
-                var vector = await _embeddingService.GetNormalizeEmbeddingAsync(text);
+                var vector = await _embeddingService.GetNormalizeLocalEmbeddingAsync(text);
                 _chunks.Add(new KnowledgeChunks { Text = text, Vector = vector });
             }
 

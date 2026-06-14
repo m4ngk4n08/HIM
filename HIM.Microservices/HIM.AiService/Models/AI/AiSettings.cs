@@ -2,7 +2,7 @@
 {
     public class AiSettings
     {
-        public string ChatProvider { get; set; }
+        public string ChatProvider { get; set; } = string.Empty;
         public OllamaSettings Ollama { get; set; } = new();
         public GroqSettings Groq { get; set; } = new();
         public KnowledgeBaseSettings KnowledgeBase { get; set; } = new();
