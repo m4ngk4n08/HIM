@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  him-ai:
+    build:
+      context: ./HIM.Microservices/HIM.AiServices
+    restart: always
+    # No ports exposed. this stays private.
+  
+  him-gateway:
+    build:
+      context: ./HIM.Gateway
+    ports:
+      - "22:22" # Public port 22 -> docker port 22
+    environment:
+      - AiServiceSettings__BaseUrl=http://him-ai:8080
+    depends_on:
+      - him-ai
+    restart: always
