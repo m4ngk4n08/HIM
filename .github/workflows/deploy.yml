@@ -1,0 +1,60 @@
+name: Build and Deploy HIM Portfolio
+
+on:
+    push:
+        branches: [ "main" ] # Trigger only when we merge into main
+
+env:
+    REGISTRY: ghcr.io
+    GATEWAY_IMAGE: ${{ github.repository_owner }}/him-gateway
+    AI_IMAGE: ${{ github.repository_owner }}/him-ai
+
+jobs:
+    build-and-push:
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            packages: write
+
+        steps:
+            - name: Checkout Repository
+              uses: actions/checkout@v4
+            
+            - name: Log in to GitHub Container Registry
+              uses: docker/login-action@v3
+              with:
+                registry: ${{ env.REGISTRY }}
+                username: ${{ github.actor }}
+                password: ${{ secrets.GITHUB_TOKEN }}
+
+            # 1. Build and Push AI Service
+            - name: Build and Push AI Service
+              uses: docker/build-push-action@v5
+              with:
+                context: ./HIM.Microservices/HIM.AiService
+                push: true
+                tags: ${{ env.REGISTRY }}/${{ env.AI_IMAGE }}:latest
+
+            # 2. Build and Push SSH Gateway
+            - name: Build and Push Gateway
+              uses: docker/build-push-action@v5
+              with:
+                context: ./HIM.Gateway
+                push: true
+                tags: ${{ env.REGISTRY }}/${{ env.GATEWAY_IMAGE }}:latest
+        
+    deploy:
+        needs: build-and-push
+        runs-on: ubuntu-latest
+        steps:
+            - name: Execute Remote Deployment via SSH
+              uses: appleboy/ssh-action@v1.0.3
+              with:
+                host: ${{ secrets.VPS_IP }}
+                username: root
+                key: ${{ secrets.SSH_PRIVATE_KEY }}
+                port: 2200
+                script: |
+                    cd ~/him-portfolio
+                    docker compose pull
+                    docker compose up -d
