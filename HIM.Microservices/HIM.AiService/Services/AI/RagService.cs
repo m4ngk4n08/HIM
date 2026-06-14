@@ -103,18 +103,9 @@ namespace HIM.AiService.Services.AI
         {
             try
             {
-                float[] queryVector;
-
-
                 // CRITICAL: we must normalize the query vector to match our knowledge base vectors
-                if (_settings.ChatProvider.Equals("Groq", StringComparison.OrdinalIgnoreCase))
-                {
-                    queryVector = await _embeddingService.GetNormalizeLocalEmbeddingAsync(question);
-                }
-                else
-                {
-                    queryVector = await _embeddingService.GetNormalizeEmbeddingAsync(question);
-                }
+
+                var queryVector = await _embeddingService.GetNormalizeLocalEmbeddingAsync(question);
 
                 // Optimize Search using SIMD Dot Product + PriorityQueue
                 var chunks = await _kbService.SearchAsync(queryVector, topK: 10);

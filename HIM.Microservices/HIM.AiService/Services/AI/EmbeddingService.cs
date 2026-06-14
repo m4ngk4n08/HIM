@@ -2,6 +2,7 @@ using HIM.AiService.Models.AI;
 using HIM.AiService.Services.AI.Interface;
 using Microsoft.Extensions.Options;
 using Microsoft.ML.OnnxRuntime;
+using Microsoft.ML.OnnxRuntime.Tensors;
 using Microsoft.ML.Tokenizers;
 using System.Numerics;
 using System.Text.Json;
@@ -16,6 +17,7 @@ namespace HIM.AiService.Services.AI
         private readonly InferenceSession _session;
         private readonly Tokenizer _tokenizer;
         private readonly IVectorSearchService _vectorSearchService;
+        private const int ModelDimensions = 384;
 
         public EmbeddingService(
             HttpClient httpClient,
@@ -44,18 +46,69 @@ namespace HIM.AiService.Services.AI
             var result = await response.Content.ReadFromJsonAsync<OllamaEmbeddingResponse>();
             var embedding = result?.Embedding ?? Array.Empty<float>();
 
-            if(embedding.Length > 0)
-            {
-                NormalizeL2(embedding);
-            }
+            NormalizeL2(embedding);
 
             return embedding;
         }
 
-        public Task<float[]> GetNormalizeLocalEmbeddingAsync(string text)
+        public async Task<float[]> GetNormalizeLocalEmbeddingAsync(string text)
         {
-            var encoded = _tokenizer.EncodeToIds(text);
-            var tokens = encoded.ids
+            // Get IDs directly as the library intended
+            var ids = _tokenizer.EncodeToIds(text);
+            var tokens = ids.Select(t => (long)t).ToArray();
+
+            // Manually construct the attention mask
+            // For BERT-style models, 1 = 'attend to this', 0 = 'ignore'(padding)
+            var mask = Enumerable.Repeat(1L, tokens.Length).ToArray();
+
+            // Manually construct Token Type ids(all 0s for a single sequence)
+            var typeIds = Enumerable.Repeat(0L, tokens.Length).ToArray();
+
+            // Create Tensors [BatchSize, SequenceLength] -> [1, N]
+            var dimensions = new[] { 1, tokens.Length };
+            var inputIdsTensor = new DenseTensor<long>(tokens, dimensions);
+            var maskTensor = new DenseTensor<long>(mask, dimensions);
+            var typeIdsTensor = new DenseTensor<long>(typeIds, dimensions);
+
+            var inputs = new List<NamedOnnxValue>
+            {
+                NamedOnnxValue.CreateFromTensor("input_ids", inputIdsTensor),
+                NamedOnnxValue.CreateFromTensor("attention_mask", maskTensor),
+                NamedOnnxValue.CreateFromTensor("token_type_ids", typeIdsTensor)
+            };
+
+            // Run Inference
+            using var results = _session.Run(inputs);
+
+            // Mean pooling
+            // Most BERT models output a tensor of [1, SequenceLength, 384].
+            // We should just take the first 384, we should average all tokens.
+            var outputTensor = results.First().AsTensor<float>();
+            var pooled = PerformMeanPooling(outputTensor, tokens.Length);
+
+            NormalizeL2(pooled.AsSpan());
+
+            return pooled;
+        }
+
+        private float[] PerformMeanPooling(Tensor<float> outputTensor, int tokenCount)
+        {
+            float[] pooled = new float[ModelDimensions];
+            for (int t = 0; t < tokenCount; t++)
+            {
+                for(int d = 0; d< ModelDimensions; d++)
+                {
+                    pooled[d] += outputTensor[0, t, d];
+                }
+            }
+
+            for(int d = 0; d < ModelDimensions; d++)
+            {
+                pooled[d] /= tokenCount;
+            }
+
+            return pooled;
+
         }
 
         /// <summary>
@@ -81,7 +134,7 @@ namespace HIM.AiService.Services.AI
             }
 
             for (; i < vector.Length; i++)
-                sum += vector[i] + vector[i];
+                sum += vector[i] * vector[i];
 
             float norm = MathF.Sqrt(sum);
             if (norm < 1e-10f) return;
