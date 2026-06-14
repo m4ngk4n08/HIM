@@ -18,7 +18,7 @@ namespace HIM.Gateway.Services.SSH
         private readonly KnowledgeBaseSettings _kbSettings;
         private PortfolioData? _data;
         private readonly ConditionalWeakTable<IAnsiConsole, UserCooldownState> _cooldowns = new();
-        private readonly TimeSpan _cooldownDuration = TimeSpan.FromSeconds(3);
+        private readonly TimeSpan _cooldownDuration = TimeSpan.FromSeconds(10);
 
         private class UserCooldownState { public DateTime LastQuery { get; set; } }
 
@@ -76,7 +76,7 @@ namespace HIM.Gateway.Services.SSH
                 default:
                     if(IsRateLimited(console))
                     {
-                        console.MarkupLine("[yellow]![/] [grey]Neural Link is cooling down.. please wait");
+                        console.MarkupLine($"[yellow]![/] [grey]{Markup.Escape("Neural Link is cooling down.. please wait")}[/]");
                         break;
                     }
                     await HandleAiChatAsync(console, command, ct);
