@@ -18,7 +18,7 @@ namespace HIM.Gateway.Services.SSH
         private readonly KnowledgeBaseSettings _kbSettings;
         private PortfolioData? _data;
         private readonly ConditionalWeakTable<IAnsiConsole, UserCooldownState> _cooldowns = new();
-        private readonly TimeSpan _cooldownDuration = TimeSpan.FromSeconds(10);
+        private readonly TimeSpan _cooldownDuration = TimeSpan.FromSeconds(3);
 
         private class UserCooldownState { public DateTime LastQuery { get; set; } }
 

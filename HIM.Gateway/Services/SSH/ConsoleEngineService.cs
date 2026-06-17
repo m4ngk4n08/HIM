@@ -135,7 +135,7 @@ namespace HIM.Gateway.Services.SSH
         public async Task RenderSplashScreenAsync(IAnsiConsole console, CancellationToken ct)
         {
             // Set the terminal window/tab title using ANSI OSC 0 sequence
-            console.Write("\x1b]0;ANGELO.EXE\x07");
+            console.Write("\x1b]0;a11s.exe\x07");
 
             console.Clear();
 
