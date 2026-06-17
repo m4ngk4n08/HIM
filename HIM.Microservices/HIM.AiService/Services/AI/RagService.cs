@@ -1,4 +1,5 @@
-﻿using HIM.AiService.Models.AI;
+﻿using Google.GenAI.Types;
+using HIM.AiService.Models.AI;
 using HIM.AiService.Services.AI.Interface;
 using Microsoft.Extensions.Options;
 using Microsoft.SemanticKernel;
@@ -23,23 +24,30 @@ namespace HIM.AiService.Services.AI
             _settings = settings.Value;
 
             var builder = Kernel.CreateBuilder();
-            
-            if(_settings.ChatProvider.Equals("Groq", StringComparison.OrdinalIgnoreCase))
-            {
-                // REDIRECT: Use OpenAI connector to talk to Groq
-                builder.AddOpenAIChatCompletion(
-                    modelId: _settings.Groq.ModelId,
-                    apiKey: _settings.Groq.ApiKey,
-                    endpoint: new Uri(_settings.Groq.Endpoint)
-                    );
-            }
-            else
-            {
-                builder.AddOllamaChatCompletion(
-                    _settings.Ollama.ModelId, 
-                    new Uri(_settings.Ollama.BaseUrl));
-            }
 
+
+            switch (_settings.ChatProvider)
+            {
+                case "Groq":
+                    // REDIRECT: Use OpenAI connector to talk to Groq
+                    builder.AddOpenAIChatCompletion(
+                        modelId: _settings.Groq.ModelId,
+                        apiKey: _settings.Groq.ApiKey,
+                        endpoint: new Uri(_settings.Groq.Endpoint)
+                        );
+                    break;
+                case "Gemini":
+                    builder.AddGoogleAIGeminiChatCompletion(
+                        modelId: _settings.Gemini.ModelId,
+                        apiKey: _settings.Gemini.ApiKey
+                    );
+                break;
+                default:
+                    builder.AddOllamaChatCompletion(
+                        _settings.Ollama.ModelId, 
+                        new Uri(_settings.Ollama.BaseUrl));
+                break;
+            }
 
             _kernel = builder.Build();
         }
@@ -51,6 +59,8 @@ namespace HIM.AiService.Services.AI
 
         public async IAsyncEnumerable<string> AskAsync(string question, [EnumeratorCancellation] CancellationToken ct = default)
         {
+            var modelId = _settings.Gemini.ModelId;
+            var apiKey = _settings.Gemini.ApiKey;
             // Setup phase(using a tuple-based result pattern for clean error handling)
             var (context, error) = await TryGetContextAsync(question);
 

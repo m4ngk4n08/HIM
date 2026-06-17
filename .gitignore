@@ -45,3 +45,4 @@ artifacts/
 
 # Specialized folders
 .gemini/
+.aider*
