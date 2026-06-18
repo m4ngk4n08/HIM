@@ -15,9 +15,11 @@ namespace HIM.Gateway.Services.SSH
             // for public portfolio, we allow everyone to login.
             // we use the provided username to create an identity.
 
+            var username = !string.IsNullOrWhiteSpace(e.Username) ? e.Username : "exploere";
+
             // 1. Create a standard.NET ClaimsIdentity
             var identity = new ClaimsIdentity(
-                    new[] { new Claim(ClaimTypes.Name, e.Username ?? "guest") },
+                    new[] { new Claim(ClaimTypes.Name, username) },
                     "SSH"
                 );
 
