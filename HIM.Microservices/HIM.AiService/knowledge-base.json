@@ -97,20 +97,40 @@
         "ai_engine": "Implements a 'Real Deal' RAG pipeline using a local all-minilm-l6-v2 ONNX model for zero-latency, in-process embeddings. Inference is handled by a Groq-backed Semantic Kernel using the llama-3.3-70b-versatile model.",
         "optimizations": "Uses SIMD-accelerated Dot Product calculations via System.Numerics for vector searches. Implements Mean Pooling and L2 Normalization in-process to ensure semantic accuracy without requiring heavy external APIs.",
         "impact": "Reduced server costs by 80% by eliminating the need for 8GB+ RAM typically required for local embedding services, allowing the entire ecosystem to run on a $4/month VPS.",
-        "github_link" : "https://github.com/m4ngk4n08/HIM"
+        "github_link": "https://github.com/m4ngk4n08/HIM"
       }
     },
     {
-      "name": "IntelligentSearch RAG",
-      "stack": ".NET 10, Angular, PostgreSQL pgvector, OpenAI",
-      "status": "Live",
-      "description": "An enterprise-grade document search system built to prove scalability and real-world AI integration capabilities."
+      "name": "Secure-Pulse: Real-Time Fraud Engine",
+      "role": "Principal Architect & Lead Developer",
+      "stack": ".NET 10, Redpanda (Kafka), ONNX Runtime, Anomaly Detection, Spectre.Console",
+      "status": "Ongoing",
+      "description": "A high-concurrency, event-driven fraud detection engine designed for modern banking infrastructure, leveraging my background at PSBank.",
+      "technical_deep_dive": {
+        "architecture": "Utilizes an asynchronous event-stream pattern via Redpanda to process thousands of simulated financial transactions per second with sub-millisecond latency.",
+        "ai_engine": "Implements a local ONNX-based Anomaly Detection model that evaluates transaction risk in sub-5ms, identifying patterns such as velocity attacks and geographic displacement.",
+        "visualization": "Features a real-time TUI dashboard that visualizes live transaction throughput, risk scores, and active security mitigations."
+      }
     },
     {
-      "name": "Heuristic-Shared Library",
-      "stack": "gRPC, Protobuf, Shared Architecture",
-      "status": "Active",
-      "description": "A centralized infrastructure library used to standardize communication and DTOs across the HIM microservice ecosystem."
+      "name": "Ghost Mesh: Self-Healing Orchestrator",
+      "role": "System Architect",
+      "stack": ".NET 10, gRPC, Docker Socket API, ONNX Runtime",
+      "status": "Pending",
+      "description": "An autonomous microservice orchestration layer that uses AI to automate system observability and recovery.",
+      "technical_deep_dive": {
+        "goal": "Implement an autonomous Watchdog service that monitors container health via gRPC and uses local AI to analyze log patterns for predicting and preventing service failures."
+      }
+    },
+    {
+      "name": "Lumen-FS: AI-Powered Virtual File System",
+      "role": "Systems Engineer",
+      "stack": ".NET 10, FUSE/Dokany, SIMD, Vector Embeddings",
+      "status": "Pending",
+      "description": "A user-mode virtual file system that integrates semantic search directly into the OS file structure.",
+      "technical_deep_dive": {
+        "goal": "Create a virtual drive where every stored file is automatically indexed as a vector. Users can search the drive semantically using a SIMD-accelerated Dot Product engine."
+      }
     }
   ],
   "education": {
@@ -166,7 +186,7 @@
     },
     {
       "question": "How much do you cost? / What is your salary expectation?",
-      "answer": "I don't negotiate salary on a public terminal. Angelo expects competitive compensation reflecting his 5+ years of enterprise .NET and banking experience. The human Angelo can discuss numbers during the actual interview—let's focus on the technical fit first."
+      "answer": "I don't negotiate salary on a public terminal. Angelo expects competitive compensation reflecting his 5+ years of enterprise .NET and banking experience. The human Angelo can discuss numbers during the interview—let's focus on the technical fit first."
     },
     {
       "question": "Are you open to relocation or onsite work?",
