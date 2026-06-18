@@ -46,3 +46,9 @@ artifacts/
 # Specialized folders
 .gemini/
 .aider*
+/HIM.Gateway/Models/Tour/Enums/TourMode.cs
+/HIM.Gateway/Models/Tour/Enums/TourNavigationAction.cs
+/HIM.Gateway/Models/Tour/TourCommandResult.cs
+/HIM.Gateway/Models/Tour/TourSession.cs
+/HIM.Gateway/Models/Tour/TourStep.cs
+/HIM.Gateway/Models/Tour/TourTable.cs
