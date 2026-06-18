@@ -4,10 +4,12 @@ services:
       context: ./HIM.Microservices/HIM.AiService
     restart: always
     environment:
-      - AiSettings__ChatProvider=Groq
+      - AiSettings__ChatProvider=Gemini
       - AiSettings__Groq__ApiKey=${GROQ_API_KEY}
       - AiSettings__Groq__ModelId=llama-3.3-70b-versatile
       - AiSettings__Groq__Endpoint=https://api.groq.com/openai/v1
+      - AiSettings__Gemini__ApiKey=${GEMINI_API_KEY}
+      - AiSettings__Gemini__ModelId=gemini-3.1-flash-lite
       - LANG=en_US.UTF-8
       - LC_ALL=en_US.UTF-8
     volumes:
