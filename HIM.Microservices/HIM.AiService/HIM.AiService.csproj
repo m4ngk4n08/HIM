@@ -20,9 +20,6 @@
 	<None Update="Models\AllMiniLML6V2\vocab.txt">
 		<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	</None>
-	<Content Include="appsettings.json">
-		<CopyToOutputDirectory>Always</CopyToOutputDirectory>
-	</Content>
   </ItemGroup>
 
 </Project>
