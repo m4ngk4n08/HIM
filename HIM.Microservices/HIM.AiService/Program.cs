@@ -4,6 +4,7 @@ using HIM.AiService.Services.AI.Interface;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Configuration.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true);
 // Bind Configuration (Options Pattern - SOLID: Dependency Inversion)
 builder.Services.Configure<AiSettings>(builder.Configuration.GetSection(nameof(AiSettings)));
 

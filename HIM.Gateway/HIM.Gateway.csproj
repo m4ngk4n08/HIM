@@ -16,9 +16,6 @@
   </ItemGroup>
 
   <ItemGroup>
-	  <Content Include="appsettings.json">
-		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-	  </Content>
     <PackageReference Include="Microsoft.DevTunnels.Ssh" Version="3.12.29" />
     <PackageReference Include="Microsoft.DevTunnels.Ssh.Keys" Version="3.9.3" />
     <PackageReference Include="Microsoft.DevTunnels.Ssh.Tcp" Version="3.12.29" />
