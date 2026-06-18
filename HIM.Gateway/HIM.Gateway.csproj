@@ -16,9 +16,10 @@
   </ItemGroup>
 
   <ItemGroup>
-	<None Update="appsettings.json">
-		<CopyToOutputDirectory>Always</CopyToOutputDirectory>
-	</None>
+	  <Content Include="appsettings.json">
+		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		  <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+	  </Content>
     <PackageReference Include="Microsoft.DevTunnels.Ssh" Version="3.12.29" />
     <PackageReference Include="Microsoft.DevTunnels.Ssh.Keys" Version="3.9.3" />
     <PackageReference Include="Microsoft.DevTunnels.Ssh.Tcp" Version="3.12.29" />
