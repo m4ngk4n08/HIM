@@ -11,6 +11,8 @@ from mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 COPY --from=build /app/publish .
 
+COPY appsettings.json .
+
 # Expose the standard SSH port
 EXPOSE 22
 ENTRYPOINT [ "dotnet", "HIM.Gateway.dll" ]

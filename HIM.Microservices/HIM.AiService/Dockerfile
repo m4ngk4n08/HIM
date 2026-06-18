@@ -15,6 +15,8 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 COPY --from=build /app/publish .
 
+COPY appsettings.json .
+
 # Explicitly copy data and models into the final container
 COPY knowledge-base.json .
 COPY Models/ ./Models/
