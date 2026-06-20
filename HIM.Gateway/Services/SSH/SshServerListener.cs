@@ -189,7 +189,7 @@ namespace HIM.Gateway.Services.SSH
                 session.Credentials = new[] { hostKey };
 
                 // Handle session closure safely and prevent ObjectDisposedException
-                EventHandler<EventArgs> closedHandler = (sender, e) =>
+                EventHandler<Microsoft.DevTunnels.Ssh.Events.SshSessionClosedEventArgs> closedHandler = (sender, e) =>
                 {
                     try
                     {

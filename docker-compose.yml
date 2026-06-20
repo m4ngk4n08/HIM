@@ -20,7 +20,7 @@ services:
     build:
       context: ./HIM.Gateway
     ports:
-      - "2222:22" # Public port 2222 -> docker port 22
+      - "43829:22" # Public port 43829 -> docker port 22
     environment:
       - SshSettings__Port=22
       - AiServiceSettings__BaseUrl=http://him-ai:8080
