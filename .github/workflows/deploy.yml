@@ -53,7 +53,7 @@ jobs:
                 host: ${{ secrets.VPS_IP }}
                 username: root
                 key: ${{ secrets.SSH_PRIVATE_KEY }}
-                port: 2200
+                port: 43829
                 script: |
                     cd ~/him-portfolio
                     docker compose pull
