@@ -28,6 +28,8 @@ services:
       - DOTNET_SYSTEM_CONSOLE_ALLOW_ANSI_COLOR_REDIRECTION=true
       - LANG=en_US.UTF-8
       - LC_ALL=en_US.UTF-8
+    volumes:
+      - ./keys:/app/keys # Persist hostkeys on the vps host machine
     depends_on:
       - him-ai
     restart: always
