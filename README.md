@@ -45,8 +45,8 @@ HIM is a next-generation interactive portfolio experience delivered via the SSH 
     - [x] "Typing" animation and synchronized TUI feedback.
     - [x] Refined "Gen Z" witty personality prompt engineering.
 - [ ] **Phase 5: Deployment & Security**
-    - [ ] Dockerization and restricted shell hardening.
-    - [ ] Rate limiting and security audits.
+    - [x] Dockerization and restricted shell hardening.
+    - [x] Rate limiting and security audits.
     - [ ] Add Easter Eggs (e.g., `/matrix`).
 
 ## 📄 License
