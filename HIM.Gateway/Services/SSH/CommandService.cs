@@ -7,6 +7,7 @@ using System.Threading.Tasks.Dataflow;
 using HIM.Gateway.Models;
 using HIM.Gateway.Models.Knowledge;
 using HIM.Gateway.Services.SSH.Interfaces;
+using HIM.Gateway.Services.SSH.Interfaces.ICommandDispatcher;
 using Microsoft.Extensions.Options;
 using Spectre.Console;
 
@@ -14,20 +15,32 @@ namespace HIM.Gateway.Services.SSH
 {
     public class CommandService : ICommandService
     {
-        private readonly IAiClientService _aiClientService;
-        private readonly KnowledgeBaseSettings _kbSettings;
         private PortfolioData? _data;
-        private readonly ConditionalWeakTable<IAnsiConsole, UserCooldownState> _cooldowns = new();
+        private readonly IAiClientService _aiClientService;
+        private readonly IGameCommandService _gameCommandService;
+        private readonly IMenuCommandService _menuCommandService;
+        private readonly IStatsCommandService _statsCommandService;
+        private readonly IMatrixCommandService _matrixCommandService;
+        private readonly KnowledgeBaseSettings _kbSettings;
         private readonly TimeSpan _cooldownDuration = TimeSpan.FromSeconds(3);
+        private readonly ConditionalWeakTable<IAnsiConsole, UserCooldownState> _cooldowns = new();
 
         private class UserCooldownState { public DateTime LastQuery { get; set; } }
 
         public CommandService(
             IAiClientService aiClientService,
+            IGameCommandService gameCommandService,
+            IMenuCommandService menuCommandService,
+            IStatsCommandService statsCommandService,
+            IMatrixCommandService matrixCommandService,
             IOptions<KnowledgeBaseSettings> kbSettings)
         {
-            _aiClientService = aiClientService;
             _kbSettings = kbSettings.Value;
+            _aiClientService = aiClientService;
+            _gameCommandService = gameCommandService;
+            _menuCommandService = menuCommandService;
+            _statsCommandService = statsCommandService;
+            _matrixCommandService = matrixCommandService;
             LoadKnowledgeBase();
         }
 
@@ -50,7 +63,7 @@ namespace HIM.Gateway.Services.SSH
             }
         }
 
-        public async Task ProcessCommandAsync(IAnsiConsole console, string command, CancellationToken ct)
+        public async Task ProcessCommandAsync(IAnsiConsole console, string command, Stream stream, CancellationToken ct)
         {
             if (string.IsNullOrWhiteSpace(command)) return;
 
@@ -64,15 +77,26 @@ namespace HIM.Gateway.Services.SSH
 
             switch (command.ToLower())
             {
+                // Static commands
                 case "/help": ShowHelp(console, table); break;
                 case "/projects": ShowProjects(console, table); break;
                 case "/about": ShowAbout(console); break;
                 case "/skills": ShowSkills(console, table); break;
                 case "/experience": ShowExperience(console); break;
                 case "/clear": console.Clear();break;
+
+                // Command Dispatch:
+                case "/menu": await _menuCommandService.ExecuteAsync(console, _data, ct); break;
+                case "/stats": await _statsCommandService.ExecuteAsync(console, _data, ct); break;
+                case "/matrix": await _matrixCommandService.ExecuteAsync(console, stream, ct); break;
+                case "/game": await _gameCommandService.ExecuteAsync(console, ct); break;
+                
+                // Connection teardown
                 case "/exit":
                     console.MarkupLine("[red]Closing connection... Goodbye![/]");
                     throw new OperationCanceledException();
+                
+                // Chat integration fallback
                 default:
                     if(IsRateLimited(console))
                     {
@@ -186,8 +210,12 @@ namespace HIM.Gateway.Services.SSH
             table.Border(TableBorder.Rounded).Title("[yellow]COMMANDS[/]");
             table.AddColumn("Command").AddColumn("Description");
             table.AddRow("/about", "Personal profile").AddRow("/experience", "Work history")
-                .AddRow("/skills", "Tech Stack").AddRow("/projects", "Live projects")
-                .AddRow("/clear", "Clear screen").AddRow("/exit", "Logout");
+                 .AddRow("/skills", "Tech Stack").AddRow("/projects", "Live projects")
+                 .AddRow("/menu", "Interactive navigation menu")
+                 .AddRow("/stats", "Developer RPG stats sheet")
+                 .AddRow("/matrix", "Digital rain animation")
+                 .AddRow("/game", "Developer trivia game")
+                 .AddRow("/clear", "Clear screen").AddRow("/exit", "Logout");
             console.Write(table);
         }
 

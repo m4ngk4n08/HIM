@@ -87,11 +87,18 @@ namespace HIM.Gateway.Services.SSH
                         // --- 1. Handle Enter Key (Command Execution) ---
                         if (b == 13 || b == 10)
                         {
+                            // Extracts the accumulated characters as a string and trims leading/trailing whitespace.
                             var command = inputBuffer.ToString().Trim();
+
+                            // Clears the buffer so the next command has clean starting state.
                             inputBuffer.Clear();
 
+
+                            // EXECUTION FLOW CHANGE:
+                            // We now pass the active Network/SSH stream to the Command Router.
+                            // This provide a raw terminal control capabilities (VT100 escape codes) to sub-commands.
                             console.WriteLine();
-                            await _commandService.ProcessCommandAsync(console, command, ct);
+                            await _commandService.ProcessCommandAsync(console, command, stream, ct);
 
                             console.Write(new Text("> ", new Style(Color.Green)));
                         }
