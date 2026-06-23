@@ -1,0 +1,30 @@
+{
+  "skill_profile": {
+    "skills": [
+      {
+        "skill": "backend",
+        "compentency": 92
+      },
+      {
+        "skill": "frontend",
+        "compentency": 75
+      },
+      {
+        "skill": "devops",
+        "compentency": 85
+      },
+      {
+        "skill": "database",
+        "compentency": 80
+      },
+      {
+        "skill": "ai",
+        "compentency": 85
+      },
+      {
+        "skill": "mobile",
+        "compentency": 85
+      }
+    ]
+  }
+}

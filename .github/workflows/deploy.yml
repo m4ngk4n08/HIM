@@ -1,8 +1,7 @@
 name: Build and Deploy HIM Portfolio
 
 on:
-    push:
-        branches: [ "main" ] # Trigger only when we merge into main
+    workflow_dispatch: #manual trigger deployment
 
 env:
     REGISTRY: ghcr.io

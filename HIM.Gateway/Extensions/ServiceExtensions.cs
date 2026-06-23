@@ -1,9 +1,8 @@
 ﻿using HIM.Gateway.Services.SSH;
+using HIM.Gateway.Services.SSH.CommandDispatcher;
 using HIM.Gateway.Services.SSH.Interfaces;
+using HIM.Gateway.Services.SSH.Interfaces.ICommandDispatcher;
 using Microsoft.Extensions.DependencyInjection;
-using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace HIM.Gateway.Extensions
 {
@@ -19,6 +18,11 @@ namespace HIM.Gateway.Extensions
             services.AddSingleton<ITuiEngine, TuiEngine>();
             services.AddSingleton<ICommandService, CommandService>();
             services.AddSingleton<IConsoleEngineService, ConsoleEngineService>();
+
+            services.AddSingleton<IMenuCommandService, MenuCommandService>();
+            services.AddSingleton<IStatsCommandService, StatsCommandService>();
+            services.AddSingleton<IMatrixCommandService, MatrixCommandService>();
+            services.AddSingleton<IGameCommandService, GameCommandService>();
 
             return services;
         }

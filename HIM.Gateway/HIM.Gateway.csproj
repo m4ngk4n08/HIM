@@ -8,6 +8,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="Models\Tour\**" />
+    <EmbeddedResource Remove="Models\Tour\**" />
+    <None Remove="Models\Tour\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Content Include="knowledge-base.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
