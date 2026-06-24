@@ -10,6 +10,9 @@ HIM is a next-generation interactive portfolio experience delivered via the SSH 
 - 🚧 **Phase 5 (Validation & Refinement):** In Progress. Final stability checks, hardening, and deployment preparation.
 
 ## 🚀 Key Technical Achievements
+- **Pluggable TUI Game Engine:** Developed a decoupled gaming framework using Strategy & Factory patterns, enabling real-time, interactive games (like Trivia, RegexQuest, and CodeDebugger) over SSH.
+- **Zero-Allocation Input System:** Implemented a high-performance ANSI parsing service that converts raw SSH byte-streams into game inputs with near-zero GC pressure.
+- **High-Energy UX:** Created a "Digital Surge" transition system using `Spectre.Console.Live` for immersive, full-screen animations.
 - **SIMD-Accelerated Math:** High-performance vector normalization and Dot Product calculations using `System.Numerics`, making vector search lightning fast.
 - **Binary Embedding Cache:** Implemented a custom binary persistence layer for embeddings, reducing AI service startup time from seconds to milliseconds.
 - **High-Context RAG Ingestion:** Developed a recursive JSON flattener that consolidates objects (like work experiences) into semantically rich sentences for better LLM accuracy.
@@ -17,7 +20,7 @@ HIM is a next-generation interactive portfolio experience delivered via the SSH 
 - **Robust TUI Architecture:** Hardened with markup escaping and optimized HTTP streaming to prevent session crashes and handle network latency.
 
 ## 🏗️ Architecture
-1. **HIM.Gateway:** The SSH server entry point (Console .NET 10). Manages TUI rendering and session lifecycle.
+1. **HIM.Gateway:** The SSH server entry point (Console .NET 10). Manages TUI rendering, session lifecycle, and the pluggable Game Engine.
 2. **HIM.AiService:** A RAG-based microservice for intelligent responses, optimized with hardware acceleration.
 3. **TUI Application:** The interactive frontend integrated directly into the Gateway's session handling.
 
@@ -44,10 +47,14 @@ HIM is a next-generation interactive portfolio experience delivered via the SSH 
     - [x] Binary Embedding Caching.
     - [x] "Typing" animation and synchronized TUI feedback.
     - [x] Refined "Gen Z" witty personality prompt engineering.
-- [ ] **Phase 5: Deployment & Security**
+- [x] **Phase 5: TUI Game Engine Expansion**
+    - [x] Pluggable Engine Architecture (Strategy/Factory).
+    - [x] Tier 1 Logic Games: Trivia, RegexQuest, CodeDebugger.
+    - [ ] Tier 2 Real-Time Games: 2048, Minesweeper (Phase 3 - Final Bosses).
+- [ ] **Phase 6: Deployment & Security**
     - [x] Dockerization and restricted shell hardening.
     - [x] Rate limiting and security audits.
-    - [ ] Add Easter Eggs (e.g., `/matrix`).
+    - [x] Add Easter Eggs (e.g., `/matrix`).
 
 ## 📄 License
 MIT
