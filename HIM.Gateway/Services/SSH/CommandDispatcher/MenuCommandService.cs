@@ -1,4 +1,5 @@
 ﻿using HIM.Gateway.Models.Knowledge;
+using HIM.Gateway.Services.SSH.Interfaces;
 using HIM.Gateway.Services.SSH.Interfaces.ICommandDispatcher;
 using Spectre.Console;
 using System;
@@ -9,6 +10,11 @@ namespace HIM.Gateway.Services.SSH.CommandDispatcher
 {
     internal sealed class MenuCommandService : IMenuCommandService
     {
+        public MenuCommandService(ICommandDispatcherHelper commandDispatcherHelper)
+        {
+            _commandDispatcherHelper = commandDispatcherHelper;
+        }
+
         private static readonly string[] MenuOptions =
             [
                 "About Me",
@@ -20,55 +26,51 @@ namespace HIM.Gateway.Services.SSH.CommandDispatcher
                 "Exit"
             ];
 
-        public async Task ExecuteAsync(IAnsiConsole console, PortfolioData data, CancellationToken ct)
+        private readonly ICommandDispatcherHelper _commandDispatcherHelper;
+
+        public async Task ExecuteAsync(IAnsiConsole console, Stream stream, PortfolioData data, CancellationToken ct)
         {
             while (!ct.IsCancellationRequested)
             {
                 console.Clear();
                 RenderMenuHeader(console);
 
-                string choice;
-                try
+                for (int i = 0; i < MenuOptions.Length; i++)
                 {
-                    choice = await new SelectionPrompt<string>()
-                        .Title("[bold cyan]What would you like to explore?")
-                        .PageSize(10)
-                        .HighlightStyle(Style.Parse("bold cyan or grey19"))
-                        .AddChoices(MenuOptions)
-                        .ShowAsync(console, ct);
-                }
-                catch(OperationCanceledException)
-                {
-                    return;
+                    console.WriteLine($"{i + 1} {MenuOptions[i]}");
                 }
 
-                switch (choice)
+                console.WriteLine("─────────────────");
+                console.Write(new Text("Selection: ", new Style(Color.Green)));
+
+                string choice = await _commandDispatcherHelper.ReadInputManualAsync(console, stream, ct);
+
+                // Map the number input back to the MenuOptions string
+                if (int.TryParse(choice, out int index) && index > 0 && index <= MenuOptions.Length)
                 {
-                    case "About Me":            ShowAbout(console, data);  break;
-                    case "Skills & Tech Stack": ShowSkills(console,data);  break;
-                    case "Work Experience":     ShowExperience(console, data); break;
-                    case "Projects":            ShowProjects(console, data); break;
-                    case "Developer Stats":     ShowStats(console, data); break;
-                    case "Exit":                return;
-                    default:                    continue;
+                    string selectedOption = MenuOptions[index - 1];
+
+                    switch (selectedOption)
+                    {
+                        case "About Me": ShowAbout(console, data); break;
+                        case "Skills & Tech Stack": ShowSkills(console, data); break;
+                        case "Work Experience": ShowExperience(console, data); break;
+                        case "Projects": ShowProjects(console, data); break;
+                        case "Developer Stats": ShowStats(console, data); break;
+                        case "Exit": return;
+                    }
+                }
+                else if (choice.ToLower() == "exit")
+                {
+                    return;
                 }
 
                 console.WriteLine();
                 console.MarkupLine("[grey]Press [white]Enter[/] to return to menu...[/]");
-
-                try
-                {
-                    await new TextPrompt<string>(string.Empty)
-                        .AllowEmpty()
-                        .ShowAsync(console, ct);
-                }
-                catch (OperationCanceledException)
-                {
-                    return;
-                }
-
+                await _commandDispatcherHelper.ReadInputManualAsync(console, stream, ct); // wait for enter
             }
         }
+            
 
         private void ShowStats(IAnsiConsole console, PortfolioData data)
         {
@@ -98,7 +100,7 @@ namespace HIM.Gateway.Services.SSH.CommandDispatcher
             foreach(var job in data.Experiences)
             {
                 var node = tree.AddNode(
-                    $"[bold cyan]{job.Position?.EscapeMarkup()} @ " +
+                    $"[bold cyan]{job.Position?.EscapeMarkup()} @ [/]" +
                     $"[white]{job.Company?.EscapeMarkup()}[/] " +
                     $"[grey]({job.Duration?.EscapeMarkup()})[/]"
                     );
@@ -139,7 +141,7 @@ namespace HIM.Gateway.Services.SSH.CommandDispatcher
                 new Grid()
                     .AddColumn().AddColumn()
                     .AddRow("[grey]Location:[/]", $"[white]{p.Location.EscapeMarkup()}[/]")
-                    .AddRow("[grey]Github:[/]", $"[blue]{p.Contact.GetValueOrDefault("github", "N/A").EscapeMarkup()}")
+                    .AddRow("[grey]Github:[/]", $"[blue]{p.Contact.GetValueOrDefault("github", "N/A").EscapeMarkup()}[/]")
                 );
 
             console.Write(new Panel(layout)

@@ -6,6 +6,6 @@ namespace HIM.Gateway.Services.ServiceModel
 {
     public class AiServiceSettings
     {
-        public string BaseUrl { get; set; } = string.Empty;
+        public string BaseUrl { get; set; } = "http://localhost:5247";
     }
 }
