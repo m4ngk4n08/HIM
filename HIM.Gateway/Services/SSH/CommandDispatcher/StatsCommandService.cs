@@ -6,6 +6,7 @@ using Spectre.Console;
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Text.Json;
 
 namespace HIM.Gateway.Services.SSH.CommandDispatcher
 {
@@ -42,7 +43,7 @@ namespace HIM.Gateway.Services.SSH.CommandDispatcher
             console.WriteLine();
             RenderIdentityCard(console, data.PersonalInfo);
             console.WriteLine();
-            RenderSkillBars(console);
+            RenderSkillBars(console, cancellationToken);
             console.WriteLine();
             RenderProjectSummary(console, data.Projects);
             console.WriteLine();
@@ -78,21 +79,58 @@ namespace HIM.Gateway.Services.SSH.CommandDispatcher
             console.Write(table);
         }
 
-        private void RenderSkillBars(IAnsiConsole console)
+        private async Task RenderSkillBars(IAnsiConsole console, CancellationToken ct)
         {
             var chart = new BarChart()
                 .Width(60)
                 .Label("[bold yellow underline]SKILL PROFICIENCIES[/]");
 
-            foreach(var item in _profile.Skills)
+            string filePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "command-dispatcher.json");
+
+            if (!File.Exists(filePath))
             {
-                var (_, color) = GetProfileColor(item.Skill);
-                var label = item.Skill.Length > 0
-                    ? char.ToUpper(item.Skill[0]) + item.Skill[1..]
-                    : item.Skill;
+                console.MarkupLine("[red]Error:[/] SKill configuration file now found.");
+                return;
             }
 
-            console.Write(chart);
+            try
+            {
+                string jsonString = await File.ReadAllTextAsync(filePath, ct);
+
+                var options = new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                };
+
+                var config = JsonSerializer.Deserialize<CommandDispatcherConfig>(jsonString, options);
+
+                var skills = config?.SkillProfile?.Skills;
+
+                if(skills == null || !skills.Any())
+                {
+                    console.MarkupLine("[yellow]No skill profiles found in the configuration.[/]");
+                    return;
+                }
+
+
+                foreach (var item in skills)
+                {
+                    var (_, color) = GetProfileColor(item.Skill);
+                    var label = item.Skill.Length > 0
+                        ? char.ToUpper(item.Skill[0]) + item.Skill[1..]
+                        : item.Skill;
+
+                    chart.AddItem(label, item.Compentency, color);
+                }
+
+                console.Write(chart);
+            }
+            catch (Exception)
+            {
+
+                throw;
+            }
+
         }
 
         private void RenderIdentityCard(IAnsiConsole console, PersonalInfo personalInfo)

@@ -8,6 +8,6 @@ namespace HIM.Gateway.Services.SSH.Interfaces.ICommandDispatcher
 {
     public interface IMenuCommandService
     {
-        Task ExecuteAsync(IAnsiConsole console, PortfolioData data, CancellationToken ct);
+        Task ExecuteAsync(IAnsiConsole console, Stream stream, PortfolioData data, CancellationToken ct);
     }
 }

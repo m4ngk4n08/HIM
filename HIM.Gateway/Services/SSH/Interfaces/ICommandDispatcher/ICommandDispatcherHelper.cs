@@ -5,8 +5,8 @@ using System.Text;
 
 namespace HIM.Gateway.Services.SSH.Interfaces.ICommandDispatcher
 {
-    public interface IGameCommandService
+    public interface ICommandDispatcherHelper
     {
-        Task ExecuteAsync(IAnsiConsole console, Stream stream, CancellationToken ct);
+        Task<string> ReadInputManualAsync(IAnsiConsole console, Stream stream, CancellationToken ct);
     }
 }

@@ -79,17 +79,13 @@ namespace HIM.Gateway.Services.SSH
             {
                 // Static commands
                 case "/help": ShowHelp(console, table); break;
-                case "/projects": ShowProjects(console, table); break;
-                case "/about": ShowAbout(console); break;
-                case "/skills": ShowSkills(console, table); break;
-                case "/experience": ShowExperience(console); break;
                 case "/clear": console.Clear();break;
 
                 // Command Dispatch:
-                case "/menu": await _menuCommandService.ExecuteAsync(console, _data, ct); break;
+                case "/menu": await _menuCommandService.ExecuteAsync(console, stream, _data, ct); break;
                 case "/stats": await _statsCommandService.ExecuteAsync(console, _data, ct); break;
                 case "/matrix": await _matrixCommandService.ExecuteAsync(console, stream, ct); break;
-                case "/game": await _gameCommandService.ExecuteAsync(console, ct); break;
+                case "/game": await _gameCommandService.ExecuteAsync(console, stream, ct); break;
                 
                 // Connection teardown
                 case "/exit":
@@ -171,84 +167,16 @@ namespace HIM.Gateway.Services.SSH
             console.WriteLine();
         }
 
-        private void ShowExperience(IAnsiConsole console)
-        {
-            var tree = new Tree("[bold yellow]CAREER JOURNEY[/]").Guide(TreeGuide.Line);
-
-            foreach (var job in _data!.Experiences)
-            {
-                var node = tree.AddNode(
-                    $"[bold cyan]{job.Position?.EscapeMarkup()}[/] @ " +
-                    $"[white]{job.Company?.EscapeMarkup()}[/] " +
-                    $"[grey]({job.Duration?.EscapeMarkup()})[/]");
-                foreach (var highlights in job.Highlights)
-                {
-                    node.AddNode(highlights.EscapeMarkup());
-                }
-            }
-
-            console.Write(tree);
-        }
-
-        private void ShowSkills(IAnsiConsole console, Table table)
-        {
-            table.Border(TableBorder.Rounded).Title("[bold blue]TECH STACK[/]");
-            table.AddColumn("Category").AddColumn("Technologies");
-
-            foreach (var category in _data!.TechnicalSkills)
-            {
-                table.AddRow(
-                    $"[yellow]{char.ToUpper(category.Key[0]) + category.Key[1..]}[/]",
-                    string.Join(", ", category.Value)
-                    );
-            }
-            console.Write(table);
-        }
-
         private void ShowHelp(IAnsiConsole console, Table table)
         {
             table.Border(TableBorder.Rounded).Title("[yellow]COMMANDS[/]");
             table.AddColumn("Command").AddColumn("Description");
-            table.AddRow("/about", "Personal profile").AddRow("/experience", "Work history")
-                 .AddRow("/skills", "Tech Stack").AddRow("/projects", "Live projects")
-                 .AddRow("/menu", "Interactive navigation menu")
+            table.AddRow("/menu", "Interactive navigation menu")
                  .AddRow("/stats", "Developer RPG stats sheet")
                  .AddRow("/matrix", "Digital rain animation")
                  .AddRow("/game", "Developer trivia game")
                  .AddRow("/clear", "Clear screen").AddRow("/exit", "Logout");
             console.Write(table);
-        }
-
-        private void ShowProjects(IAnsiConsole console, Table table)
-        {
-            table.Border(TableBorder.DoubleEdge).Title("[bold white]PROJECTS[/]");
-            table.AddColumn("[yellow]Name[/]").AddColumn("[yellow]Stack[/]").AddColumn("[yellow]Status[/]");
-
-            foreach(var proj in _data!.Projects)
-            {
-                table.AddRow($"[bold]{proj.Name}[/]", proj.Stack, $"[green]{proj.Status}[/]");
-            }
-
-            console.Write(table);
-
-        }
-
-        private void ShowAbout(IAnsiConsole console)
-        {
-            var p = _data!.PersonalInfo;
-            var layout = new Rows(
-                new Markup($"[cyan]{p.Summary}[/]\n"),
-                new Rule().RuleStyle("grey"),
-                new Grid()
-                    .AddColumn().AddColumn()
-                    .AddRow("[grey]Location:[/]", $"[white]{p.Location}[/]")
-                    .AddRow("[grey]GitHub:[/]", $"[blue]{p.Contact.GetValueOrDefault("github", "N/A")}[/]")
-                );
-
-            console.Write(new Panel(layout)
-                .Header($"[bold cyan] {p.Name.ToUpper()} // {p.Role.ToUpper()} [/]")
-                .Border(BoxBorder.Rounded).BorderColor(Color.Cyan1).Expand());
-                
         }
     }
 }
