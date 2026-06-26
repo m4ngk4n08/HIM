@@ -175,8 +175,6 @@ namespace HIM.Gateway.Services.SSH.Game
                 .Expand()
                 );
 
-            console.WriteLine();
-            console.MarkupLine("[grey]Press [bold white]Enter[/] to start the challenge..[/]");
         }
     }
 }

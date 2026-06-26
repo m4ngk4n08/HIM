@@ -31,8 +31,6 @@ namespace HIM.Gateway.Services.SSH
                 console.Profile.Height = (int)height;
 
                 console.Clear();
-
-                RenderHeader(console);
                 // Inform the user or redraw the prompt
                 console.MarkupLine("[grey](Terminal resized to {0}x{1})[/]", width, height);
                 console.Write(new Text("> ", new Style(Color.Green)));
@@ -52,7 +50,7 @@ namespace HIM.Gateway.Services.SSH
                 var console = _consoleEngineService.CreateConsole(sshStream, width, height);
 
                 // 3. Execute the Visual Initialization (Splash Screen)
-                await _consoleEngineService.RenderSplashScreenAsync(console, ct);
+                await _consoleEngineService.RenderSplashScreenAsync(console, sshStream, ct);
 
                 // 4. Start the Interactive Command & AI Chat Loop
                 await _consoleEngineService.HandleInteractionLoopAsync(console, sshStream, ct);
@@ -74,24 +72,6 @@ namespace HIM.Gateway.Services.SSH
             finally
             {
                 _activeConsoles.TryRemove(channel, out _);
-            }
-        }
-
-        private void RenderHeader(IAnsiConsole console)
-        {
-            if (console.Profile.Width >= 60)
-            {
-                // Render Aesthetic Header
-                console.Write(
-                    new FigletText("H I M")
-                        .Centered()
-                        .Color(Color.Cyan1));
-            }
-            else
-            {
-                console.Write(
-                    new Text("--- H I M ---", new Style(Color.Cyan1, decoration: Decoration.Bold))
-                    .Centered());
             }
         }
 

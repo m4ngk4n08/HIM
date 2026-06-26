@@ -21,6 +21,8 @@ namespace HIM.Gateway.Services.SSH
         private readonly IMenuCommandService _menuCommandService;
         private readonly IStatsCommandService _statsCommandService;
         private readonly IMatrixCommandService _matrixCommandService;
+        private readonly ICommandDispatcherHelper _commandDispatcherHelper;
+        private readonly ITerminalLayoutService _terminalLayoutService;
         private readonly KnowledgeBaseSettings _kbSettings;
         private readonly TimeSpan _cooldownDuration = TimeSpan.FromSeconds(3);
         private readonly ConditionalWeakTable<IAnsiConsole, UserCooldownState> _cooldowns = new();
@@ -33,6 +35,8 @@ namespace HIM.Gateway.Services.SSH
             IMenuCommandService menuCommandService,
             IStatsCommandService statsCommandService,
             IMatrixCommandService matrixCommandService,
+            ICommandDispatcherHelper commandDispatcherHelper,
+            ITerminalLayoutService terminalLayoutService,
             IOptions<KnowledgeBaseSettings> kbSettings)
         {
             _kbSettings = kbSettings.Value;
@@ -41,6 +45,8 @@ namespace HIM.Gateway.Services.SSH
             _menuCommandService = menuCommandService;
             _statsCommandService = statsCommandService;
             _matrixCommandService = matrixCommandService;
+            _commandDispatcherHelper = commandDispatcherHelper;
+            _terminalLayoutService = terminalLayoutService;
             LoadKnowledgeBase();
         }
 
@@ -73,17 +79,22 @@ namespace HIM.Gateway.Services.SSH
                 return;
             }
 
+
+            await _terminalLayoutService.InitializeTerminalLayoutAsync(console, stream, ct);
+
             var table = new Table();
 
             switch (command.ToLower())
             {
                 // Static commands
                 case "/help": ShowHelp(console, table); break;
-                case "/clear": console.Clear();break;
+                case "/clear":
+                    await _terminalLayoutService.InitializeTerminalLayoutAsync(console, stream, ct);
+                    break;
 
                 // Command Dispatch:
                 case "/menu": await _menuCommandService.ExecuteAsync(console, stream, _data, ct); break;
-                case "/stats": await _statsCommandService.ExecuteAsync(console, _data, ct); break;
+                case "/stats": await _statsCommandService.ExecuteAsync(console, stream, _data, ct); break;
                 case "/matrix": await _matrixCommandService.ExecuteAsync(console, stream, ct); break;
                 case "/game": await _gameCommandService.ExecuteAsync(console, stream, ct); break;
                 

@@ -1,4 +1,5 @@
-﻿using HIM.Gateway.Services.SSH.Interfaces.ICommandDispatcher;
+﻿using HIM.Gateway.Services.SSH.Interfaces;
+using HIM.Gateway.Services.SSH.Interfaces.ICommandDispatcher;
 using HIM.Gateway.Services.SSH.Interfaces.IGame;
 using Spectre.Console;
 using System;
@@ -11,13 +12,15 @@ namespace HIM.Gateway.Services.SSH.Game.TheGame
         IGameInputService gameInputService,
         IGameVisualService gameVisualService,
         IGameScoreService gameScoreService,
-        ICommandDispatcherHelper commandDispatcherHelper
+        ICommandDispatcherHelper commandDispatcherHelper,
+        ITerminalLayoutService terminalLayoutService
         ) : IGameService
     {
         private readonly IGameInputService _gameInputService = gameInputService;
         private readonly IGameVisualService _gameVisualService = gameVisualService;
         private readonly IGameScoreService _gameScoreService = gameScoreService;
         private readonly ICommandDispatcherHelper _commandDispatcherHelper = commandDispatcherHelper;
+        private readonly ITerminalLayoutService _terminalLayoutService = terminalLayoutService;
 
         private record TrivialQuestion(string Prompt, Func<string, bool> Judge, string Explanation);
 
@@ -27,15 +30,13 @@ namespace HIM.Gateway.Services.SSH.Game.TheGame
 
         public async Task ExecuteAsync(IAnsiConsole console, Stream stream, CancellationToken ct)
         {
+            await _terminalLayoutService.InitializeTerminalLayoutAsync(console, stream, ct);
             _gameVisualService.ApplyGameTheme(console);
             
             string triviaInstructions = "You will be presented with 5 random technical questions.\n" +
                             "Type your answer and press Enter to submit.\n" +
                             "Correct answers earn 10 XP. Type [/q] at any time to quit.";
             await _gameVisualService.ShowInstructionAsync(console, Name, triviaInstructions, ct);
-
-            // Small delat for the user to read
-            await Task.Delay(1500, ct);
 
             var questions = GetRandomQuestions(5);
             int score = 0;

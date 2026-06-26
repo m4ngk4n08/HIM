@@ -1,4 +1,5 @@
-﻿using HIM.Gateway.Services.SSH.Interfaces.ICommandDispatcher;
+﻿using HIM.Gateway.Services.SSH.Interfaces;
+using HIM.Gateway.Services.SSH.Interfaces.ICommandDispatcher;
 using HIM.Gateway.Services.SSH.Interfaces.IGame;
 using Spectre.Console;
 using System;
@@ -11,12 +12,14 @@ namespace HIM.Gateway.Services.SSH.Game.TheGame
         IGameInputService gameInputService,
         IGameVisualService gameVisualService,
         IGameScoreService gameScoreService,
-        ICommandDispatcherHelper commandDispatcherHelper
+        ICommandDispatcherHelper commandDispatcherHelper,
+        ITerminalLayoutService terminalLayoutService
         ) : IGameService
     {
         private readonly IGameVisualService _gameVisualService = gameVisualService;
         private readonly IGameScoreService _gameScoreService = gameScoreService;
         private readonly ICommandDispatcherHelper _commandDispatcherHelper = commandDispatcherHelper;
+        private readonly ITerminalLayoutService _terminalLayoutService = terminalLayoutService;
 
         public string Name => "CodeDebugger";
 
@@ -24,6 +27,7 @@ namespace HIM.Gateway.Services.SSH.Game.TheGame
 
         public async Task ExecuteAsync(IAnsiConsole console, Stream strea, CancellationToken ct)
         {
+            await _terminalLayoutService.InitializeTerminalLayoutAsync(console, strea, ct);
             _gameVisualService.ApplyGameTheme(console);
 
             string instructions = "You will be shown snippets of broken C# code.\n" +
@@ -31,7 +35,6 @@ namespace HIM.Gateway.Services.SSH.Game.TheGame
                                  "Type [/q] to quit.";
 
             await _gameVisualService.ShowInstructionAsync(console, Name, instructions, ct);
-            await Task.Delay(1500, ct);
 
             var challenges = GetChallenges();
             int score = 0;

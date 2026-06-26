@@ -17,6 +17,8 @@ namespace HIM.Gateway.Services.ServiceModel.Enums
         D,
         Enter,
         Escape,
-        Space
+        Space,
+        Y,
+        N
     }
 }

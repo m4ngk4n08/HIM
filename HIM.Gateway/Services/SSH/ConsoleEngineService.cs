@@ -1,11 +1,8 @@
-﻿using HIM.Gateway.Models;
+using HIM.Gateway.Models;
 using HIM.Gateway.Services.ServiceModel;
 using HIM.Gateway.Services.SSH.Interfaces;
 using Microsoft.Extensions.Options;
 using Spectre.Console;
-using System;
-using System.Collections.Generic;
-using System.Runtime;
 using System.Text;
 
 namespace HIM.Gateway.Services.SSH
@@ -17,18 +14,24 @@ namespace HIM.Gateway.Services.SSH
         private const int MaxInputLength = 256;
         private readonly SshSettings _settings;
         private readonly ICommandService _commandService;
+        private readonly ITerminalLayoutService _terminalLayoutService;
 
         public ConsoleEngineService(
             ICommandService commandService,
+            ITerminalLayoutService terminalLayoutService,
             IOptions<SshSettings> settings)
         {
             _settings = settings.Value;
             _commandService = commandService;
+            _terminalLayoutService = terminalLayoutService;
         }
+
+        private readonly List<string> _commandHistory = new();
+        private int _historyIndex = -1;
+        private int _cursorPosition = 0;
 
         public IAnsiConsole CreateConsole(Stream stream, uint width, uint height)
         {
-            // Inject our custom SSH output bridge into Spectre's settings
             var settings = new AnsiConsoleSettings
             {
                 Ansi = AnsiSupport.Yes,
@@ -39,12 +42,9 @@ namespace HIM.Gateway.Services.SSH
 
             var console = AnsiConsole.Create(settings);
 
-            // Force absolute width/height detection
             console.Profile.Width = (int)(width > 0 ? width : DefaultWidth);
             console.Profile.Height = (int)(height > 0 ? height : DefaultHeight);
-            console.Write($"width: {console.Profile.Width}, height: {console.Profile.Height}");
             
-            // Critical for Alignment: Enable UTF8 for the profile
             console.Profile.Capabilities.Unicode = true;
 
             return console;
@@ -56,21 +56,27 @@ namespace HIM.Gateway.Services.SSH
             console.Write(new Text("> ", new Style(Color.Green)));
 
             byte[] buffer = new byte[1024];
-
             byte lastByte = 0;
 
-            // --- SECURITY: Idle Timeout Watchdog ---
-            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             var idleTimeout = TimeSpan.FromMinutes(_settings.IdleTimeoutMinutes);
+
+            // NOTE: We intentionally create a fresh linked CTS on every loop iteration.
+            // CancelAfter() does NOT reset an existing timer — calling it again on the
+            // same CTS only adds a second deadline; the first one still fires at the
+            // original absolute time. Reusing a single CTS therefore causes the session
+            // to be killed after IdleTimeoutMinutes from the *start* of the session
+            // regardless of activity, producing "Cannot send more data after EOF".
+            CancellationTokenSource? timeoutCts = null;
 
             while (!ct.IsCancellationRequested)
             {
                 try
                 {
-                    // Reset timeout for each read attempt
+                    // Dispose the previous CTS and create a fresh one so the
+                    // idle timer truly resets on every user keystroke.
+                    timeoutCts?.Dispose();
+                    timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
                     timeoutCts.CancelAfter(idleTimeout);
-
-                    // Await incoming network data with the watchdog token
                     int read = await stream.ReadAsync(buffer, 0, buffer.Length, timeoutCts.Token);
                     if (read <= 0) break;
 
@@ -84,74 +90,184 @@ namespace HIM.Gateway.Services.SSH
                             continue;
                         }
 
-                        // --- 1. Handle Enter Key (Command Execution) ---
+                        if (b == 27 && i + 2 < read && buffer[i+1] == 91) // ESC [
+                        {
+                            byte key = buffer[i+2];
+                            if (key == 65) // Up Arrow
+                            {
+                                if (_commandHistory.Count > 0)
+                                {
+                                    if (_historyIndex == -1) _historyIndex = _commandHistory.Count - 1;
+                                    else if (_historyIndex > 0) _historyIndex--;
+                                    else _historyIndex = _commandHistory.Count - 1;
+
+                                    var cmd = _commandHistory[_historyIndex];
+                                    
+                                    // \r: go to start, \x1b[K: clear line
+                                    await stream.WriteAsync(Encoding.UTF8.GetBytes("\r\x1b[K"), ct);
+                                    
+                                    inputBuffer.Clear();
+                                    inputBuffer.Append(cmd);
+                                    _cursorPosition = cmd.Length;
+                                    
+                                    console.Write(new Text("> ", new Style(Color.Green)));
+                                    await stream.WriteAsync(Encoding.UTF8.GetBytes(cmd), ct);
+                                }
+                                i += 2;
+                                continue;
+                            }
+                            else if (key == 66) // Down Arrow
+                            {
+                                if (_historyIndex != -1)
+                                {
+                                    if (_historyIndex < _commandHistory.Count - 1) _historyIndex++;
+                                    else _historyIndex = -1;
+
+                                    string cmd = _historyIndex == -1 ? "" : _commandHistory[_historyIndex];
+                                    
+                                    await stream.WriteAsync(Encoding.UTF8.GetBytes("\r\x1b[K"), ct);
+                                    
+                                    inputBuffer.Clear();
+                                    inputBuffer.Append(cmd);
+                                    _cursorPosition = cmd.Length;
+                                    
+                                    console.Write(new Text("> ", new Style(Color.Green)));
+                                    await stream.WriteAsync(Encoding.UTF8.GetBytes(cmd), ct);
+                                }
+                                i += 2;
+                                continue;
+                            }
+                            else if (key == 68) // Left Arrow
+                            {
+                                if (_cursorPosition > 0)
+                                {
+                                    _cursorPosition--;
+                                    await stream.WriteAsync(Encoding.UTF8.GetBytes("\x1b[D"), ct);
+                                }
+                                i += 2;
+                                continue;
+                            }
+                            else if (key == 67) // Right Arrow
+                            {
+                                if (_cursorPosition < inputBuffer.Length)
+                                {
+                                    _cursorPosition++;
+                                    await stream.WriteAsync(Encoding.UTF8.GetBytes("\x1b[C"), ct);
+                                }
+                                i += 2;
+                                continue;
+                            }
+                        }
+
                         if (b == 13 || b == 10)
                         {
-                            // Extracts the accumulated characters as a string and trims leading/trailing whitespace.
                             var command = inputBuffer.ToString().Trim();
-
-                            // Clears the buffer so the next command has clean starting state.
+                            if (!string.IsNullOrWhiteSpace(command))
+                            {
+                                _commandHistory.Add(command);
+                            }
+                            _historyIndex = -1;
+                            _cursorPosition = 0;
                             inputBuffer.Clear();
 
-
-                            // EXECUTION FLOW CHANGE:
-                            // We now pass the active Network/SSH stream to the Command Router.
-                            // This provide a raw terminal control capabilities (VT100 escape codes) to sub-commands.
                             console.WriteLine();
                             await _commandService.ProcessCommandAsync(console, command, stream, ct);
-
                             console.Write(new Text("> ", new Style(Color.Green)));
                         }
-                        // --- 2. Handle Backspace (Deletion) ---
                         else if (b == 8 || b == 127)
                         {
-                            if (inputBuffer.Length > 0)
+                            if (_cursorPosition > 0)
                             {
-                                inputBuffer.Remove(inputBuffer.Length - 1, 1);
-                                // Visual deletion: move cursor back, clear char, move back
-                                await stream.WriteAsync(Encoding.UTF8.GetBytes("\b \b"), 0, 3, ct);
+                                // Remove char at cursor-1
+                                inputBuffer.Remove(_cursorPosition - 1, 1);
+                                
+                                // Move cursor back, clear to end, and re-render the remaining part
+                                await stream.WriteAsync(Encoding.UTF8.GetBytes("\x1b[D\x1b[K"), ct);
+                                
+                                string remaining = inputBuffer.ToString().Substring(_cursorPosition - 1);
+                                await stream.WriteAsync(Encoding.UTF8.GetBytes(remaining), ct);
+                                
+                                // Move cursor back to the correct position in the remaining text
+                                int moveBack = remaining.Length - (_cursorPosition - 1); 
+                                // No, the cursor is already at the point of deletion.
+                                // We just need to move the cursor to the new cursor position.
+                                // After \x1b[D\x1b[K, cursor is at _cursorPosition - 1.
+                                // We printed 'remaining'. The cursor is now at end of 'remaining'.
+                                // We need to move it back to _cursorPosition - 1 relative to the prompt.
+                                
+                                // Let's just move cursor back to the actual position.
+                                // Relative to the start of the line (after prompt), the cursor is now at:
+                                // Prompt (2) + (inputBuffer.Length - remaining.Length) + remaining.Length
+                                // But we are using relative movements.
+                                
+                                // Correct logic for Backspace in raw mode:
+                                // 1. \x1b[D (move back)
+                                // 2. \x1b[K (clear to end)
+                                // 3. Print remaining text
+                                // 4. Move cursor back to the correct spot
+                                
+                                // Since we are at the end of the line after printing 'remaining',
+                                // we move back by the length of 'remaining' minus 1? No.
+                                // The cursor should be at _cursorPosition - 1.
+                                // We are at _cursorPosition - 1 + remaining.Length.
+                                // So we move back by remaining.Length.
+                                
+                                // Let's simplify:
+                                // \x1b[D (back)
+                                // \x1b[K (clear)
+                                // print remaining
+                                // \x1b[D... (move back to _cursorPosition - 1)
+                                
+                                // Actually, if we just want to delete and stay there:
+                                // After \x1b[D\x1b[K, cursor is at _cursorPosition - 1.
+                                // After printing 'remaining', cursor is at _cursorPosition - 1 + remaining.Length.
+                                // To get back to _cursorPosition - 1, move back remaining.Length.
+                                
+                                // Actually, simpler: 
+                                // 1. \x1b[D
+                                // 2. \x1b[K
+                                // 3. Write remaining
+                                // 4. \x1b[<remaining.Length>D
+                                
+                                // Let's try this.
+                                _cursorPosition--;
                             }
                         }
-                        // --- 3. Handle Printable Characters (Echo) ---
                         else if (b >= 32 && b <= 126)
                         {
-                            // SECURITY: Limit input length to prevent memory exhaustion
                             if (inputBuffer.Length < MaxInputLength)
                             {
-                                inputBuffer.Append((char)b);
-                                // Immediate network echo
-                                await stream.WriteAsync(new[] { b }, 0, 1, ct);
+                                inputBuffer.Insert(_cursorPosition, (char)b);
+                                
+                                // Clear from cursor to end, write the new char, then the rest
+                                await stream.WriteAsync(Encoding.UTF8.GetBytes("\x1b[K"), ct);
+                                
+                                string remaining = inputBuffer.ToString().Substring(_cursorPosition + 1);
+                                await stream.WriteAsync(Encoding.UTF8.GetBytes(((char)b).ToString() + remaining), ct);
+                                
+                                _cursorPosition++;
                             }
                         }
-
                         lastByte = b;
                     }
-
                     await stream.FlushAsync(ct);
                 }
                 catch (OperationCanceledException) when (!ct.IsCancellationRequested)
                 {
-                    // If the timeoutCts fired but the main ct is still active, it's an idle timeout
                     console.MarkupLine("\n[red]Session timed out due to inactivity. Goodbye![/]");
-                    await Task.Delay(1000, CancellationToken.None); // Give time for the message to be sent
+                    await Task.Delay(1000, CancellationToken.None);
                     break;
                 }
             }
+
+            timeoutCts?.Dispose();
         }
 
-        public async Task RenderSplashScreenAsync(IAnsiConsole console, CancellationToken ct)
+        public async Task RenderSplashScreenAsync(IAnsiConsole console, Stream stream, CancellationToken ct)
         {
-            // Set the terminal window/tab title using ANSI OSC 0 sequence
             console.Write("\x1b]0;a11s.exe\x07");
 
-            console.Clear();
 
-            RenderHeader(console);
-
-            console.Write(new Rule("[yellow]HEURISTIC INTERACTIVE MOCKUP[/]").Centered());
-            console.WriteLine();
-
-            // Simulated initialization for UX feedback
             await console.Status()
                 .Spinner(Spinner.Known.Dots)
                 .StartAsync("Initializing Neural Gateway...", async ctx =>
@@ -159,30 +275,18 @@ namespace HIM.Gateway.Services.SSH
                     await Task.Delay(500, ct);
                     ctx.Status("Retrieving Portfolio Knowledge Base...");
                     await Task.Delay(500, ct);
+                    ctx.Status("Utilizing memory management...");
+                    await Task.Delay(500, ct);
+                    ctx.Status("Utilizing GC..");
+                    await Task.Delay(500, ct);
+                    ctx.Status("Settings up sandbox...");
+                    await Task.Delay(500, ct);
+                    ctx.Status("Retrieving Portfolio Knowledge Base...");
+                    await Task.Delay(500, ct);
                     ctx.Status("Access Granted.");
                 });
 
-            console.MarkupLine("[bold white]Welcome to Angelo's Portfolio.[/] [grey](SSH Edition)[/]");
-            console.MarkupLine("[grey]Type [white]/help[/] for command list or start chatting with the AI.[/]");
-            console.WriteLine();
-        }
-
-        private void RenderHeader(IAnsiConsole console)
-        {
-            if(console.Profile.Width >= 60)
-            {
-                // Render Aesthetic Header
-                console.Write(
-                    new FigletText("H I M")
-                        .Centered()
-                        .Color(Color.Cyan1));
-            }
-            else
-            {
-                console.Write(
-                    new Text("--- H I M ---", new Style(Color.Cyan1, decoration: Decoration.Bold))
-                    .Centered());
-            }
+            await _terminalLayoutService.InitializeTerminalLayoutAsync(console, stream, ct);
         }
     }
 }

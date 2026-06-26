@@ -1,4 +1,5 @@
-﻿using HIM.Gateway.Services.SSH.Interfaces.ICommandDispatcher;
+﻿using HIM.Gateway.Services.SSH.Interfaces;
+using HIM.Gateway.Services.SSH.Interfaces.ICommandDispatcher;
 using HIM.Gateway.Services.SSH.Interfaces.IGame;
 using Microsoft.Extensions.FileSystemGlobbing.Internal;
 using Spectre.Console;
@@ -13,11 +14,13 @@ namespace HIM.Gateway.Services.SSH.Game.TheGame
         IGameInputService gameInputService,
         IGameVisualService gameVisualService,
         IGameScoreService gameScoreService,
-        ICommandDispatcherHelper commandDispatcherHelper) : IGameService
+        ICommandDispatcherHelper commandDispatcherHelper,
+        ITerminalLayoutService terminalLayoutService) : IGameService
     {
         private readonly IGameVisualService _gameVisualService = gameVisualService;
         private readonly IGameScoreService _gameScoreService = gameScoreService;
         private readonly ICommandDispatcherHelper _commandDispatcherHelper = commandDispatcherHelper;
+        private readonly ITerminalLayoutService _terminalLayoutService = terminalLayoutService;
 
         public string Name => "RegexQuest";
 
@@ -25,14 +28,14 @@ namespace HIM.Gateway.Services.SSH.Game.TheGame
 
         public async Task ExecuteAsync(IAnsiConsole console, Stream strea, CancellationToken ct)
         {
+            await _terminalLayoutService.InitializeTerminalLayoutAsync(console, strea, ct);
+            
             _gameVisualService.ApplyGameTheme(console);
             
             string regexInstructions = "Objective: Write a Regular Expression (Regex) that matches the target string exactly.\n" +
                                    "Your regex will be tested against the target string. If it matches, you advance.\n" +
                                    "Type [/q] at any time to quit.";
             await _gameVisualService.ShowInstructionAsync(console, Name, regexInstructions, ct);
-
-            await Task.Delay(1500, ct);
 
             var levels = GetLevels();
             int score = 0;

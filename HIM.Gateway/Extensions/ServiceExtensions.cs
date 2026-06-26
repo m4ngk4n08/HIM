@@ -21,12 +21,16 @@ namespace HIM.Gateway.Extensions
             services.AddSingleton<ITuiEngine, TuiEngine>();
             services.AddSingleton<ICommandService, CommandService>();
             services.AddSingleton<IConsoleEngineService, ConsoleEngineService>();
+            services.AddSingleton<IIpBanService, IpBanService>();
 
             services.AddSingleton<IMenuCommandService, MenuCommandService>();
             services.AddSingleton<IStatsCommandService, StatsCommandService>();
             services.AddSingleton<IMatrixCommandService, MatrixCommandService>();
             services.AddSingleton<IGameCommandService, GameCommandService>();
             services.AddSingleton<ICommandDispatcherHelper, CommandDispatcherHelper>();
+
+            // --- Layout Engine ---
+            services.AddSingleton<ITerminalLayoutService, TerminalLayoutService>();
 
             // --- Game Engine ---
             // The Factory resolves the games
@@ -42,6 +46,7 @@ namespace HIM.Gateway.Extensions
             services.AddSingleton<IGameService, TriviaGame>();
             services.AddSingleton<IGameService, RegexQuest>();
             services.AddSingleton<IGameService, CodeDebugger>();
+            services.AddSingleton<IGameService, PacManGame>();
             return services;
         }
     }
