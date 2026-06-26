@@ -8,7 +8,7 @@ namespace HIM.Gateway.Services.SSH.Interfaces
     public interface IConsoleEngineService
     {
         IAnsiConsole CreateConsole(Stream stream, uint width, uint height);
-        Task RenderSplashScreenAsync(IAnsiConsole console, CancellationToken ct);
         Task HandleInteractionLoopAsync(IAnsiConsole console, Stream stream, CancellationToken ct);
+        Task RenderSplashScreenAsync(IAnsiConsole console, Stream stream, CancellationToken ct);
     }
 }

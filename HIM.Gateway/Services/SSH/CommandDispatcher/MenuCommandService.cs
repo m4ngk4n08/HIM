@@ -8,12 +8,10 @@ using System.Text;
 
 namespace HIM.Gateway.Services.SSH.CommandDispatcher
 {
-    internal sealed class MenuCommandService : IMenuCommandService
+    internal sealed class MenuCommandService(
+            ICommandDispatcherHelper commandDispatcherHelper,
+            ITerminalLayoutService terminalLayoutService) : IMenuCommandService
     {
-        public MenuCommandService(ICommandDispatcherHelper commandDispatcherHelper)
-        {
-            _commandDispatcherHelper = commandDispatcherHelper;
-        }
 
         private static readonly string[] MenuOptions =
             [
@@ -26,15 +24,13 @@ namespace HIM.Gateway.Services.SSH.CommandDispatcher
                 "Exit"
             ];
 
-        private readonly ICommandDispatcherHelper _commandDispatcherHelper;
+        private readonly ICommandDispatcherHelper _commandDispatcherHelper = commandDispatcherHelper;
+        private readonly ITerminalLayoutService _terminalLayoutService = terminalLayoutService;
 
         public async Task ExecuteAsync(IAnsiConsole console, Stream stream, PortfolioData data, CancellationToken ct)
         {
             while (!ct.IsCancellationRequested)
             {
-                console.Clear();
-                RenderMenuHeader(console);
-
                 for (int i = 0; i < MenuOptions.Length; i++)
                 {
                     console.WriteLine($"{i + 1} {MenuOptions[i]}");
@@ -57,7 +53,9 @@ namespace HIM.Gateway.Services.SSH.CommandDispatcher
                         case "Work Experience": ShowExperience(console, data); break;
                         case "Projects": ShowProjects(console, data); break;
                         case "Developer Stats": ShowStats(console, data); break;
-                        case "Exit": return;
+                        case "Exit":
+                            await _terminalLayoutService.InitializeTerminalLayoutAsync(console, stream, ct);
+                            return;
                     }
                 }
                 else if (choice.ToLower() == "exit")
@@ -68,6 +66,9 @@ namespace HIM.Gateway.Services.SSH.CommandDispatcher
                 console.WriteLine();
                 console.MarkupLine("[grey]Press [white]Enter[/] to return to menu...[/]");
                 await _commandDispatcherHelper.ReadInputManualAsync(console, stream, ct); // wait for enter
+                
+                await _terminalLayoutService.InitializeTerminalLayoutAsync(console, stream, ct);
+
             }
         }
             
@@ -150,10 +151,5 @@ namespace HIM.Gateway.Services.SSH.CommandDispatcher
                 );
         }
 
-        private void RenderMenuHeader(IAnsiConsole console)
-        {
-            console.Write(new Rule("[bold cyan]H I M - Portfolio Navigator[/]").RuleStyle("cyan").Centered());
-            console.WriteLine();
-        }
     }
 }

@@ -1,4 +1,5 @@
-﻿using HIM.Gateway.Services.SSH.Interfaces.ICommandDispatcher;
+﻿using HIM.Gateway.Services.SSH.Interfaces;
+using HIM.Gateway.Services.SSH.Interfaces.ICommandDispatcher;
 using Spectre.Console;
 using System;
 using System.Collections.Generic;
@@ -6,13 +7,13 @@ using System.Text;
 
 namespace HIM.Gateway.Services.SSH.CommandDispatcher
 {
-    internal sealed class MatrixCommandService : IMatrixCommandService
+    internal sealed class MatrixCommandService(ITerminalLayoutService terminalLayoutService) : IMatrixCommandService
     {
         private static readonly char[] GlyphSet =
             "abcdefghijklmnopqrstuvwxyz0123456789@#$%&*<>".ToCharArray();
-
+        private readonly ITerminalLayoutService _terminalLayoutService = terminalLayoutService;
         private const int FrameDelayMs = 80;
-        private const int MaxDurationMs = 15_000;
+        private const int MaxDurationMs = 5_000;
 
         public async Task ExecuteAsync(IAnsiConsole console, Stream stream, CancellationToken ct)
         {
@@ -85,6 +86,7 @@ namespace HIM.Gateway.Services.SSH.CommandDispatcher
                     await WriteRawAsync(stream, encoding, sb.ToString(), animCts.Token);
                     await stream.FlushAsync(animCts.Token);
                     await Task.Delay(FrameDelayMs, animCts.Token);
+
                 }
             }
             catch (OperationCanceledException) { }
@@ -92,6 +94,20 @@ namespace HIM.Gateway.Services.SSH.CommandDispatcher
             {
                 await WriteRawAsync(stream, encoding, "\x1b[?25h\x1b[0m\x1b[2J\x1b[H", CancellationToken.None);
                 await stream.FlushAsync(CancellationToken.None);
+                try
+                {
+                    if (stream.CanWrite)
+                    {
+
+                        await WriteRawAsync(stream, encoding, "\x1b[?25h\x1b[0m\x1b[2J\x1b[H", CancellationToken.None);
+                        await stream.FlushAsync(CancellationToken.None);
+                        await _terminalLayoutService.InitializeTerminalLayoutAsync(console, stream, ct);
+                    }
+                }
+                catch (Exception)
+                {
+                    // Ignore exceptions during final stream cleanup if the client disconnected or the stream was already disposed.
+                }
             }
         }
 

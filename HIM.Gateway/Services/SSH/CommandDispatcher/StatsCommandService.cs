@@ -1,5 +1,6 @@
 ﻿using HIM.Gateway.Models.Knowledge;
 using HIM.Gateway.Services.ServiceModel.CommandDispatcher;
+using HIM.Gateway.Services.SSH.Interfaces;
 using HIM.Gateway.Services.SSH.Interfaces.ICommandDispatcher;
 using Microsoft.Extensions.Options;
 using Spectre.Console;
@@ -12,12 +13,9 @@ namespace HIM.Gateway.Services.SSH.CommandDispatcher
 {
     internal sealed class StatsCommandService : IStatsCommandService
     {
-        private readonly SkillProfile _profile;
 
-        public StatsCommandService(
-            IOptions<SkillProfile> profile)
+        public StatsCommandService()
         {
-            _profile = profile.Value;
         }
 
         private (double score, Color color) GetProfileColor(string skill)
@@ -36,19 +34,18 @@ namespace HIM.Gateway.Services.SSH.CommandDispatcher
             return (0, color);
         }
 
-        public Task ExecuteAsync(IAnsiConsole console, PortfolioData data, CancellationToken cancellationToken)
+        public async Task ExecuteAsync(IAnsiConsole console, Stream stream, PortfolioData data, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-
+                        
             console.WriteLine();
             RenderIdentityCard(console, data.PersonalInfo);
             console.WriteLine();
-            RenderSkillBars(console, cancellationToken);
+            await RenderSkillBars(console, cancellationToken);
             console.WriteLine();
             RenderProjectSummary(console, data.Projects);
             console.WriteLine();
 
-            return Task.CompletedTask;
         }
 
         private void RenderProjectSummary(IAnsiConsole console, List<ProjectItem> projects)

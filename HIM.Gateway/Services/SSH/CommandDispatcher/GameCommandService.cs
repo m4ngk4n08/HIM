@@ -1,4 +1,5 @@
-﻿using HIM.Gateway.Services.SSH.Interfaces.ICommandDispatcher;
+﻿using HIM.Gateway.Services.SSH.Interfaces;
+using HIM.Gateway.Services.SSH.Interfaces.ICommandDispatcher;
 using HIM.Gateway.Services.SSH.Interfaces.IGame;
 using Spectre.Console;
 using System;
@@ -74,9 +75,21 @@ namespace HIM.Gateway.Services.SSH.CommandDispatcher
             try
             {
                 await _gameVisualService.ShowTransitionAsync(console, selectedGame.Name);
-                await selectedGame.InitializeAsync(ct);
-                await selectedGame.ExecuteAsync(console, stream, ct);
-                await selectedGame.ShutdownAsync();
+
+                if(selectedGame.Name.Equals(4) || selectedGame.Name.Equals("Pac-Man"))
+                {
+
+                    console.MarkupLine("[yellow]Creation of pacman is in progress. Comback later.[/]");
+                    console.MarkupLine("[grey]/help to explore more of the contents.[/]");
+                    await selectedGame.ShutdownAsync();
+                }
+                else
+                {
+                    await selectedGame.InitializeAsync(ct);
+                    await selectedGame.ExecuteAsync(console, stream, ct);
+                    await selectedGame.ShutdownAsync();
+                }
+
             }
             catch (OperationCanceledException)
             {

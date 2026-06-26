@@ -8,6 +8,6 @@ namespace HIM.Gateway.Services.SSH.Interfaces.ICommandDispatcher
 {
     public interface IStatsCommandService
     {
-        Task ExecuteAsync(IAnsiConsole console, PortfolioData data, CancellationToken cancellationToken);
+        Task ExecuteAsync(IAnsiConsole console, Stream stream, PortfolioData data, CancellationToken cancellationToken);
     }
 }
