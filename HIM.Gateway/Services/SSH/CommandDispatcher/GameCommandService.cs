@@ -58,6 +58,7 @@ namespace HIM.Gateway.Services.SSH.CommandDispatcher
             // Try parsing as number first
             if (int.TryParse(trimmedChoice, out int index) && index > 0 && index <= availableGames.Count)
             {
+
                 selectedGame = _gameFactoryService.GetGame(availableGames[index - 1].name);
             }
             else

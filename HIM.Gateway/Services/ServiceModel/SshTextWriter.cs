@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -16,6 +16,7 @@ namespace HIM.Gateway.Services.ServiceModel
     {
         private readonly Stream _stream;
         private Encoding _encoding = Encoding.UTF8;
+        private bool _isFaulted = false;
 
         public override Encoding Encoding => _encoding;
 
@@ -27,19 +28,34 @@ namespace HIM.Gateway.Services.ServiceModel
         }
 
         public void ApplyEncoding(Encoding encoding) => _encoding = encoding ?? Encoding.UTF8;
-
         public override void Write(string? value)
         {
-            if (string.IsNullOrEmpty(value)) return;
+            if (string.IsNullOrEmpty(value) || _isFaulted) return;
 
-            // Senior Fix: SSH Terminals in raw mode require \r\n for a new line.
-            // A simple \n only moves the cursor down, not to the left margin.
-            // This replaces lone \n with \r\n, but avoids creating \r\r\n.
-            var normalizedValue = value.Replace("\r\n", "\n").Replace("\n", "\r\n");
+            try
+            {
+                var normalizedValue = value.Replace("\r\n", "\n").Replace("\n", "\r\n");
+                var bytes = _encoding.GetBytes(normalizedValue);
+                _stream.Write(bytes, 0, bytes.Length);
+                _stream.Flush();
+            }
+            catch (Exception ex) when (IsTransportException(ex))  // <-- broadened
+            {
+                _isFaulted = true;
+                // Swallow: session is dead, cleanup is driven by CancellationToken.
+            }
+        }
 
-            var bytes = _encoding.GetBytes(normalizedValue);
-            _stream.Write(bytes, 0, bytes.Length);
-            _stream.Flush();
+        private static bool IsTransportException(Exception ex)
+        {
+            if (ex is AggregateException ae)
+            {
+                ex = ae.Flatten().InnerException ?? ex;
+            }
+            return ex is IOException
+                || ex is ObjectDisposedException
+                || ex is InvalidOperationException   // "Cannot send more data after EOF"
+                || ex is OperationCanceledException;
         }
 
         public override void Write(char value) => Write(value.ToString());
