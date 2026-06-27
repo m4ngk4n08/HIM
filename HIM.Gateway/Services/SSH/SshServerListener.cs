@@ -434,8 +434,11 @@ namespace HIM.Gateway.Services.SSH
 
                     case "shell":
                         e.IsAuthorized = true;
-                        _ = Task.Run(() => _tuiEngine.RunAsync(
-                            channel, terminalWidth, terminalHeight, channelCts.Token));
+                        if (!channelCts.IsCancellationRequested)  // <-- guard
+                        {
+                            _ = Task.Run(() => _tuiEngine.RunAsync(
+                                channel, terminalWidth, terminalHeight, channelCts.Token));
+                        }
                         break;
 
                     default:

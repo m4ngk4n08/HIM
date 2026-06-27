@@ -62,11 +62,25 @@ namespace HIM.Gateway.Services.SSH
                 // Expected teardown on client disconnect or server shutdown
                 Console.WriteLine($"[TUI] Clean exit for channel {channel.ChannelId}.");
             }
+            catch (Exception ex) when (
+                ex is IOException || 
+                ex is ObjectDisposedException || 
+                (ex is InvalidOperationException && ex.Message.Contains("EOF")) ||
+                (ex is AggregateException ae && (
+                    ae.Flatten().InnerException is IOException || 
+                    ae.Flatten().InnerException is ObjectDisposedException || 
+                    (ae.Flatten().InnerException is InvalidOperationException innerIoe && innerIoe.Message.Contains("EOF"))
+                ))
+            )
+            {
+                // Transport-layer disconnects are normal in SSH. Treat as a clean exit.
+                Console.WriteLine($"[TUI] Session {channel.ChannelId} disconnected (Transport EOF).");
+            }
             catch (Exception ex)
             {
-                // Error boundary to protect the Gateway process
+                // Error boundary to protect the Gateway process from actual application bugs
                 Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine($"[TUI Error] Fatal exception in session {channel.ChannelId}: {ex.Message}");
+                Console.WriteLine(ex.ToString());
                 Console.ResetColor();
             }
             finally

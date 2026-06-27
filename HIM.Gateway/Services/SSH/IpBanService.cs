@@ -1,4 +1,4 @@
-﻿using HIM.Gateway.Models;
+using HIM.Gateway.Models;
 using HIM.Gateway.Services.SSH.Interfaces;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -163,7 +163,7 @@ namespace HIM.Gateway.Services.SSH
             var generation = existing.BanGeneration;
 
             // Not yet at ban threshold - just accumulate strikes.
-            if (strikes * settings.BanThresholdStrikes != 0)
+            if (settings.BanThresholdStrikes == 0 || strikes % settings.BanThresholdStrikes != 0)
                 return existing with { StrikeCount = strikes };
 
             // Hit threshold ( or multiple thereof): issue/escalate ban.
