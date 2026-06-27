@@ -46,7 +46,7 @@ artifacts/
 # Specialized folders
 .gemini/
 .aider*
-/HIM/plans
+/plans
 /HIM.Gateway/Models/Tour/Enums/TourMode.cs
 /HIM.Gateway/Models/Tour/Enums/TourNavigationAction.cs
 /HIM.Gateway/Models/Tour/TourCommandResult.cs
