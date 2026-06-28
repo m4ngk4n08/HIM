@@ -14,6 +14,8 @@ services:
       - AiSettings__KnowledgeBase__FilePath=knowledge-base.json
       - AiSettings__KnowledgeBase__CacheFile=cache/knowledge-base.embeddings.bin
       - AiSettings__KnowledgeBase__MemoryCollectionName=angelo-kb
+    ports:
+      - "127.0.0.1:8080:8080" #ONLY expose to VPS local loopback
     volumes:
       - ./cache:/app/cache
       - ./knowledge-base.json:/app/knowledge-base.json
