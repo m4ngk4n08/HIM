@@ -38,7 +38,6 @@ namespace HIM.Gateway.Services.SSH.CommandDispatcher
         {
             cancellationToken.ThrowIfCancellationRequested();
                         
-            console.WriteLine();
             RenderIdentityCard(console, data.PersonalInfo);
             console.WriteLine();
             await RenderSkillBars(console, cancellationToken);
@@ -135,19 +134,21 @@ namespace HIM.Gateway.Services.SSH.CommandDispatcher
             var github = personalInfo.Contact?.GetValueOrDefault("github", "N/A") ?? "N/A";
 
             var grid = new Grid()
-                .AddColumn(new GridColumn().NoWrap())
-                .AddColumn()
-                .AddRow("[grey]ROLE     :[/]", $"[bold white]{personalInfo.Role.EscapeMarkup()}[/]")
-                .AddRow("[grey]LOCATION :[/]", $"[white]{personalInfo.Location.EscapeMarkup()}[/]")
-                .AddRow("[grey]GITHUB   :[/]", $"[blue]{github.EscapeMarkup()}[/]")
-                .AddRow("[grey]STATUS   :[/]", "[bold green]ONLINE[/]");
+            .AddColumn(new GridColumn().NoWrap())
+            .AddColumn()
+            .AddRow("[grey]Role:[/]", $"[bold white]{personalInfo.Role.EscapeMarkup()}[/]")
+            .AddRow("[grey]Location:[/]", $"[white]{personalInfo.Location.EscapeMarkup()}[/]")
+            .AddRow("[grey]Github:[/]", $"[blue]{github.EscapeMarkup()}[/]")
+            .AddRow("[grey]Status:[/]", "[bold green]ONLINE[/]");
 
-            console.Write(new Panel(grid)
+            var panel = new Panel(grid)
                 .Header($"[bold cyan] {personalInfo.Name.ToUpper().EscapeMarkup()} [/]")
-                .Border(BoxBorder.Double)
-                .BorderColor(Color.Cyan1)
-                .Expand()
-                );
+                .Border(BoxBorder.Rounded)
+                .BorderColor(Color.Cyan1);
+
+            var paddedPanel = new Padder(panel, new Padding(0, 2, 0, 0));
+
+            console.Write(paddedPanel);
         }
     }
 }
