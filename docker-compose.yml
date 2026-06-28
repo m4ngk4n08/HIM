@@ -1,29 +1,32 @@
 services:
   him-ai:
-    build:
-      context: ./HIM.Microservices/HIM.AiService
+    image: ghcr.io/m4ngk4n08/him-ai:latest
     restart: always
     environment:
-      - AiSettings__ChatProvider=Gemini
+      - AiSettings__ChatProvider=Groq
       - AiSettings__Groq__ApiKey=${GROQ_API_KEY}
       - AiSettings__Groq__ModelId=llama-3.3-70b-versatile
       - AiSettings__Groq__Endpoint=https://api.groq.com/openai/v1
       - AiSettings__Gemini__ApiKey=${GEMINI_API_KEY}
       - AiSettings__Gemini__ModelId=gemini-3.1-flash-lite
-      - LANG=en_US.UTF-8
-      - LC_ALL=en_US.UTF-8
+      - AiSettings__Onnx__Tokenizer=Models/AllMiniLML6V2/vocab.txt
+      - AiSettings__Onnx__Model=Models/AllMiniLML6V2/model.onnx
+      - AiSettings__KnowledgeBase__FilePath=knowledge-base.json
+      - AiSettings__KnowledgeBase__CacheFile=cache/knowledge-base.embeddings.bin
+      - AiSettings__KnowledgeBase__MemoryCollectionName=angelo-kb
+    ports:
+      - "127.0.0.1:8080:8080" #ONLY expose to VPS local loopback
     volumes:
       - ./cache:/app/cache
-      - ./HIM.Microservices/HIM.AiService/knowledge-base.json:/app/knowledge-base.json
-  
+      - ./knowledge-base.json:/app/knowledge-base.json
+
   him-gateway:
-    build:
-      context: ./HIM.Gateway
+    image: ghcr.io/m4ngk4n08/him-gateway:latest
     ports:
-      - "22:22" # Public port 22 -> docker port 22
+      - "22:22" # <--- Now binds VPS standard SSH port 22 to internal port 22
     environment:
       - SshSettings__Port=22
-      - AiServiceSettings__BaseUrl=http://him-ai:8080
+      - AiServiceSettings__BaseUrl=http://127.0.0.1:8080
       - TERM=xterm-256color
       - DOTNET_SYSTEM_CONSOLE_ALLOW_ANSI_COLOR_REDIRECTION=true
       - LANG=en_US.UTF-8
