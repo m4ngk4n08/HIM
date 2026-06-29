@@ -6,14 +6,17 @@ using Microsoft.Extensions.Options;
 using Spectre.Console;
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace HIM.Gateway.Services.SSH.CommandDispatcher
 {
     internal sealed class StatsCommandService : IStatsCommandService
     {
-
         public StatsCommandService()
         {
         }
@@ -37,56 +40,70 @@ namespace HIM.Gateway.Services.SSH.CommandDispatcher
         public async Task ExecuteAsync(IAnsiConsole console, Stream stream, PortfolioData data, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-                        
-            RenderIdentityCard(console, data.PersonalInfo);
-            console.WriteLine();
-            await RenderSkillBars(console, cancellationToken);
+
+            var identityCard = GetIdentityCard(data.PersonalInfo);
+            var skillBars = await GetSkillBarsAsync(cancellationToken);
+
+            // Responsive Layout Choice:
+            // If the terminal has plenty of width (>= 95 chars), put Identity & Skills side-by-side.
+            if (console.Profile.Width >= 95 && skillBars != null)
+            {
+                skillBars.Width(50);
+
+                var columns = new Grid()
+                    .AddColumn(new GridColumn().NoWrap()) // Column 1: Identity Card
+                    .AddColumn(new GridColumn().Padding(4, 0, 0, 0)); // Column 2: Skill Bars
+
+                columns.AddRow(identityCard, skillBars);
+                console.Write(columns);
+            }
+            else
+            {
+                // Fallback for narrower terminals: Stack them vertically
+                console.Write(new Padder(identityCard, new Padding(0, 1, 0, 0)));
+                console.WriteLine();
+                if (skillBars != null)
+                {
+                    skillBars.Width(Math.Min(60, console.Profile.Width - 10));
+                    console.Write(skillBars);
+                }
+            }
+
             console.WriteLine();
             RenderProjectSummary(console, data.Projects);
             console.WriteLine();
-
         }
 
-        private void RenderProjectSummary(IAnsiConsole console, List<ProjectItem> projects)
+        private Panel GetIdentityCard(PersonalInfo personalInfo)
         {
-            var table = new Table()
-                .Border(TableBorder.Rounded)
-                .Title("[bold white]PROJECT LOG[/]")
-                .AddColumn("[yellow]Name[/]")
-                .AddColumn("[yellow]Stack[/]")
-                .AddColumn("[yellow]Status[/]");
+            var github = personalInfo.Contact?.GetValueOrDefault("github", "N/A") ?? "N/A";
 
-            foreach(var project in projects)
-            {
-                var statusMarkup = project.Status.ToLowerInvariant() switch
-                {
-                    "live" or "active" => $"[bold green]{project.Status.EscapeMarkup()}[/]",
-                    "wip" => $"[yellow]{project.Status.EscapeMarkup()}[/]",
-                    _ => $"[grey]{project.Status.EscapeMarkup()}[/]"
-                };
+            var grid = new Grid()
+                .AddColumn(new GridColumn().NoWrap())
+                .AddColumn()
+                .AddRow("[grey]Role:[/]", $"[bold white]{personalInfo.Role.EscapeMarkup()}[/]")
+                .AddRow("[grey]Location:[/]", $"[white]{personalInfo.Location.EscapeMarkup()}[/]")
+                .AddRow("[grey]Github:[/]", $"[blue]{github.EscapeMarkup()}[/]")
+                .AddRow("[grey]Status:[/]", "[bold green]ONLINE[/]");
 
-                table.AddRow(
-                    $"[bold]{project.Name.EscapeMarkup()}[/]",
-                    project.Stack.EscapeMarkup(),
-                    statusMarkup
-                    );
-            }
+            var panel = new Panel(grid)
+                .Header($"[bold cyan] {personalInfo.Name.ToUpper().EscapeMarkup()} [/]")
+                .Border(BoxBorder.Rounded)
+                .BorderColor(Color.Cyan1);
 
-            console.Write(table);
+            return panel;
         }
 
-        private async Task RenderSkillBars(IAnsiConsole console, CancellationToken ct)
+        private async Task<BarChart?> GetSkillBarsAsync(CancellationToken ct)
         {
             var chart = new BarChart()
-                .Width(60)
                 .Label("[bold yellow underline]SKILL PROFICIENCIES[/]");
 
             string filePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "command-dispatcher.json");
 
             if (!File.Exists(filePath))
             {
-                console.MarkupLine("[red]Error:[/] SKill configuration file now found.");
-                return;
+                return null;
             }
 
             try
@@ -99,15 +116,12 @@ namespace HIM.Gateway.Services.SSH.CommandDispatcher
                 };
 
                 var config = JsonSerializer.Deserialize<CommandDispatcherConfig>(jsonString, options);
-
                 var skills = config?.SkillProfile?.Skills;
 
-                if(skills == null || !skills.Any())
+                if (skills == null || !skills.Any())
                 {
-                    console.MarkupLine("[yellow]No skill profiles found in the configuration.[/]");
-                    return;
+                    return null;
                 }
-
 
                 foreach (var item in skills)
                 {
@@ -119,36 +133,86 @@ namespace HIM.Gateway.Services.SSH.CommandDispatcher
                     chart.AddItem(label, item.Compentency, color);
                 }
 
-                console.Write(chart);
+                return chart;
             }
-            catch (Exception)
+            catch
             {
-
-                throw;
+                return null;
             }
-
         }
 
-        private void RenderIdentityCard(IAnsiConsole console, PersonalInfo personalInfo)
+        private void RenderProjectSummary(IAnsiConsole console, List<ProjectItem> projects)
         {
-            var github = personalInfo.Contact?.GetValueOrDefault("github", "N/A") ?? "N/A";
+            // --- VERTICAL BUDGET CALCULATION ---
+            // Estimate how much vertical scrolling height we have left.
+            int headerHeight = console.Profile.Height >= 28 ? 10 : 5;
+            int statsGridHeight = (console.Profile.Width >= 95) ? 8 : 15;
+            int reservedHeight = headerHeight + statsGridHeight + 3; // 3 lines of safety buffer
+            int availableHeightForProjects = console.Profile.Height - reservedHeight;
 
-            var grid = new Grid()
-            .AddColumn(new GridColumn().NoWrap())
-            .AddColumn()
-            .AddRow("[grey]Role:[/]", $"[bold white]{personalInfo.Role.EscapeMarkup()}[/]")
-            .AddRow("[grey]Location:[/]", $"[white]{personalInfo.Location.EscapeMarkup()}[/]")
-            .AddRow("[grey]Github:[/]", $"[blue]{github.EscapeMarkup()}[/]")
-            .AddRow("[grey]Status:[/]", "[bold green]ONLINE[/]");
+            // Estimate how tall the rounded table will be with wrapped text
+            int estimatedTableHeight = 6; // Borders + Title + Headers
+            foreach (var project in projects)
+            {
+                // Estimate text wrapping of the "Stack" column
+                int stackWidth = (int)(console.Profile.Width * 0.5);
+                if (stackWidth < 10) stackWidth = 30;
+                int wrapLines = (project.Stack.Length + stackWidth - 1) / stackWidth;
+                estimatedTableHeight += Math.Max(1, wrapLines) + 1; // +1 for row line spacer
+            }
 
-            var panel = new Panel(grid)
-                .Header($"[bold cyan] {personalInfo.Name.ToUpper().EscapeMarkup()} [/]")
-                .Border(BoxBorder.Rounded)
-                .BorderColor(Color.Cyan1);
+            // If the estimated table is too tall to fit on the screen, use a clean compact fallback
+            if (estimatedTableHeight > availableHeightForProjects || console.Profile.Height < 32)
+            {
+                console.MarkupLine("[bold yellow]PROJECT LOG[/]");
+                foreach (var project in projects)
+                {
+                    var statusMarkup = project.Status.ToLowerInvariant() switch
+                    {
+                        "live" or "active" => $"[bold green]{project.Status.EscapeMarkup()}[/]",
+                        "wip" => $"[yellow]{project.Status.EscapeMarkup()}[/]",
+                        _ => $"[grey]{project.Status.EscapeMarkup()}[/]"
+                    };
 
-            var paddedPanel = new Padder(panel, new Padding(0, 2, 0, 0));
+                    console.MarkupLine($"• [bold white]{project.Name.EscapeMarkup()}[/] ({statusMarkup})");
 
-            console.Write(paddedPanel);
+                    // Prevent long stack text from wrapping into multiple lines on short screens
+                    var stack = project.Stack.EscapeMarkup();
+                    int maxStackLength = console.Profile.Width - 12;
+                    if (stack.Length > maxStackLength && maxStackLength > 10)
+                    {
+                        stack = stack[..maxStackLength] + "...";
+                    }
+                    console.MarkupLine($"  [grey]Stack:[/] {stack}");
+                }
+                return;
+            }
+
+            // --- FULL BEAUTIFUL TABLE (When space allows) ---
+            var table = new Table()
+                .Border(TableBorder.Rounded)
+                .Title("[bold white]PROJECT LOG[/]")
+                .AddColumn("[yellow]Name[/]")
+                .AddColumn("[yellow]Stack[/]")
+                .AddColumn("[yellow]Status[/]");
+
+            foreach (var project in projects)
+            {
+                var statusMarkup = project.Status.ToLowerInvariant() switch
+                {
+                    "live" or "active" => $"[bold green]{project.Status.EscapeMarkup()}[/]",
+                    "wip" => $"[yellow]{project.Status.EscapeMarkup()}[/]",
+                    _ => $"[grey]{project.Status.EscapeMarkup()}[/]"
+                };
+
+                table.AddRow(
+                    $"[bold]{project.Name.EscapeMarkup()}[/]",
+                    project.Stack.EscapeMarkup(),
+                    statusMarkup
+                );
+            }
+
+            console.Write(table);
         }
     }
 }
