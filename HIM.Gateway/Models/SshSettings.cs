@@ -15,7 +15,7 @@ namespace HIM.Gateway.Models
 
             // ── Idle / Session ────────────────────────────────────────────────
             /// <summary>Minutes before an idle session is forcefully terminated.</summary>
-            public int IdleTimeoutMinutes { get; set; } = 5;
+            public int IdleTimeoutSeconds { get; set; } = 30;
 
             // ── Per-IP Rate Limit (Layer 3) ───────────────────────────────────
             /// <summary>Rolling window in seconds for the per-IP connection rate limit.</summary>
