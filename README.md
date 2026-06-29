@@ -59,7 +59,7 @@ HIM is a next-generation interactive portfolio experience delivered via the SSH 
     - [x] Tier 2 Real-Time Games: 2048, Minesweeper (Phase 3 - Final Bosses).
 - [x] **Phase 6: Deployment & Security**
     - [x] Dockerization and restricted shell hardening.
-    - [x] Port separation (Port 22 Gateway, Port 43829 Admin OpenSSH).
+    - [x] Port separation (Port 22 Gateway, Custom Port Admin OpenSSH).
     - [x] Host Key persistence across continuous delivery cycles.
     - [x] Rate limiting and security audits (nftables & Fail2Ban).
     - [x] Add Easter Eggs (e.g., `/matrix`).
