@@ -2,6 +2,8 @@ using HIM.Gateway.Services.SSH.Interfaces;
 using HIM.Gateway.Services.SSH.Interfaces.ICommandDispatcher;
 using Spectre.Console;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace HIM.Gateway.Services.SSH
 {
@@ -20,7 +22,7 @@ namespace HIM.Gateway.Services.SSH
             console.Write(new Rule("[yellow]HEURISTIC INTERACTIVE MOCKUP[/]").Centered());
 
             // 3. Set the Scrolling Region (Line Top+1 to Bottom)
-            int top = GetHeaderHeight(console.Profile.Width);
+            int top = GetHeaderHeight(console.Profile.Width, console.Profile.Height);
             await _commandDispatcher.SetScrollingRegionAsync(stream, top + 1, console.Profile.Height, ct);
 
             // 4. Move Cursor to the start of the Scrolling Zone
@@ -30,14 +32,23 @@ namespace HIM.Gateway.Services.SSH
             console.MarkupLine("[grey]Type [white]/help[/] for command list or start chatting with the AI.[/]");
             console.WriteLine();
         }
-        private int GetHeaderHeight(int terminalWidth)
+
+        private int GetHeaderHeight(int terminalWidth, int terminalHeight)
         {
+            // If the terminal height is too short, force a compact header height (3 lines)
+            // so we don't choke the scrolling region.
+            if (terminalHeight < 28)
+            {
+                return 3;
+            }
+
             return (terminalWidth > 60) ? 8 : 3;
         }
 
         private void RenderHeader(IAnsiConsole console)
         {
-            if (console.Profile.Width >= 60)
+            // Use Figlet only if both terminal width and height are large enough
+            if (console.Profile.Width >= 60 && console.Profile.Height >= 28)
             {
                 console.Write(
                     new FigletText("H I M")
