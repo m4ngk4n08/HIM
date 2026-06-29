@@ -365,7 +365,7 @@ namespace HIM.Gateway.Services.SSH
                 if (e.Channel.ChannelType == "session")
                 {
                     var channel = await e.Channel.Session.AcceptChannelAsync(sessionCts.Token);
-                    _ = Task.Run(() => HandleShellChannelAsync(channel, sessionCts.Token));
+                    _ = Task.Run(() => HandleShellChannelAsync(channel, ipAddress, sessionCts.Token));
                 }
             };
 
@@ -404,7 +404,7 @@ namespace HIM.Gateway.Services.SSH
             }
         }
 
-        private void HandleShellChannelAsync(SshChannel channel, CancellationToken sessionToken)
+        private void HandleShellChannelAsync(SshChannel channel, string ipAddress, CancellationToken sessionToken)
         {
             var channelCts = CancellationTokenSource.CreateLinkedTokenSource(sessionToken);
             channel.Closed += (_, _) => { try { channelCts.Cancel(); } catch { } };
@@ -444,9 +444,10 @@ namespace HIM.Gateway.Services.SSH
                     default:
                         e.IsAuthorized = false;
                         _logger.LogWarning(
-                            "[Security] {Timestamp:yyyy-MM-dd HH:mm:ss} UTC | REJECTED request | " +
-                            "Type: {RequestType} | User: {User}",
-                            DateTime.UtcNow, e.RequestType,
+                            "[Security] {Timestamp} | REJECTED request | IP: {IP} | Type: {Type} | User: {User}",
+                            DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss 'UTC'"),
+                            ipAddress,
+                            e.RequestType,
                             channel.Session.Principal?.Identity?.Name ?? "unknown");
                         break;
                 }

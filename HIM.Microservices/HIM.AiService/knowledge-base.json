@@ -87,49 +87,109 @@
   },
   "projects": [
     {
-      "name": "HIM (Heuristic Interactive Mockup) - Portfolio Ecosystem",
+      "name": "HIM (Heuristic Interactive Mockup) - AI SSH Portfolio",
       "role": "Architect & Lead Developer",
-      "stack": ".NET 10, SSH, ONNX Runtime, Groq LPU, Semantic Kernel, SIMD",
-      "status": "Production-Ready",
-      "description": "A world-first AI-powered SSH portfolio. Users connect via terminal to interact with an AI persona representing my professional background. The architecture is designed for extreme cost-efficiency and high performance.",
-      "technical_deep_dive": {
-        "architecture": "A custom SSH Gateway (Microsoft.DevTunnels.Ssh) serving a Spectre.Console-based Terminal UI, communicating with a hybrid RAG AI Service.",
-        "ai_engine": "Implements a 'Real Deal' RAG pipeline using a local all-minilm-l6-v2 ONNX model for zero-latency, in-process embeddings. Inference is handled by a Groq-backed Semantic Kernel using the llama-3.3-70b-versatile model.",
-        "optimizations": "Uses SIMD-accelerated Dot Product calculations via System.Numerics for vector searches. Implements Mean Pooling and L2 Normalization in-process to ensure semantic accuracy without requiring heavy external APIs.",
-        "impact": "Reduced server costs by 80% by eliminating the need for 8GB+ RAM typically required for local embedding services, allowing the entire ecosystem to run on a $4/month VPS.",
-        "github_link": "https://github.com/m4ngk4n08/HIM"
+      "stack": ".NET 10, C#, Microsoft.DevTunnels.Ssh, Spectre.Console, ONNX Runtime, Groq LPU, Semantic Kernel, System.Numerics (SIMD), Docker, nftables, Fail2Ban",
+      "status": "Production-Ready (Phase 6 Completed)",
+      "github_link": "https://github.com/m4ngk4n08/HIM",
+      "live_access": "ssh angelodavales.info",
+      "description": "A world-first AI-powered SSH portfolio. Users connect directly via any terminal (no browser, no app install) to interact with an AI persona representing Angelo's professional background. The entire ecosystem is engineered for extreme cost-efficiency and high performance, running on a $4/month VPS.",
+      "architecture": {
+        "overview": "Three-tier microservices design: HIM.Gateway (SSH server entry point), HIM.AiService (RAG-based AI microservice), and an integrated TUI application.",
+        "him_gateway": "Custom SSH server built on Microsoft.DevTunnels.Ssh (v3.9.3). Manages TUI rendering via Spectre.Console, session lifecycle, and hosts the pluggable Game Engine. Exposed on port 22 for frictionless user access.",
+        "him_ai_service": "A RAG-based microservice implementing a local all-minilm-l6-v2 ONNX model for zero-latency, in-process embeddings. LLM inference is handled by a Groq-backed Semantic Kernel using the llama-3.3-70b-versatile model.",
+        "tui_application": "Interactive terminal frontend integrated directly into the Gateway's session handling, featuring splash screens, command processing, and live AI chat."
+      },
+      "key_technical_achievements": [
+        "Pluggable TUI Game Engine: A decoupled gaming framework using Strategy and Factory patterns, enabling real-time, interactive games (Trivia, RegexQuest, CodeDebugger) over SSH.",
+        "Zero-Allocation Input System: High-performance ANSI parsing service that converts raw SSH byte-streams into game inputs with near-zero GC pressure.",
+        "High-Energy UX: 'Digital Surge' transition system using Spectre.Console.Live for immersive, full-screen animations.",
+        "SIMD-Accelerated Math: High-performance vector normalization and Dot Product calculations using System.Numerics, making vector search lightning fast.",
+        "Binary Embedding Cache: Custom binary persistence layer for embeddings, reducing AI service startup time from seconds to milliseconds.",
+        "High-Context RAG Ingestion: Recursive JSON flattener that consolidates objects (like work experiences) into semantically rich sentences for better LLM accuracy.",
+        "Production-Hardened SSH Architecture: Separated VPS admin access onto hardened OpenSSH port 43829 (key-only, disabled passwords, legacy ssh-rsa compatibility overrides) while keeping the .NET gateway on port 22.",
+        "Kernel-Level Rate Limiting via nftables: Native nftables stateful ruleset filtering incoming connections on port 22 and 43829, dynamically blocking attackers at Layer 3/4 using 1-hour blocklists before they can consume connection slots.",
+        "Persistent Host Key Management: Resolved .NET container permission boundary and C# File.Exists 0-byte file trap via direct file-level bind-mount for /app/hostkey.pem, stabilizing the fingerprint permanently across CI/CD cycles.",
+        "Docker-to-Host Security Bridging: Fail2Ban integration with both host systemd-journald and container log streams, dynamically banning bots that trigger rate limits or malicious username requests."
+      ],
+      "ai_engine_deep_dive": {
+        "embedding_model": "Local all-minilm-l6-v2 ONNX model — runs fully in-process, zero external API calls for embeddings.",
+        "llm_inference": "Groq LPU-backed Semantic Kernel using llama-3.3-70b-versatile for fast, high-quality response generation.",
+        "vector_search": "In-process cosine similarity using SIMD Dot Product via System.Numerics. Mean Pooling and L2 Normalization applied in-process for semantic accuracy.",
+        "cost_impact": "Eliminated the need for 8GB+ RAM typically required by Python-based embedding services. Entire AI ecosystem runs on a $4/month VPS — an estimated 80% reduction in server costs."
+      },
+      "build_phases": [
+        "Phase 1 (AI Service): Manual RAG pipeline implemented with Llama3 and all-minilm.",
+        "Phase 2 (SSH Bridge): Custom SSH gateway with host key management and session handling.",
+        "Phase 3 (Terminal UI): Responsive TUI with Spectre.Console — splash screen, command processing, live AI chat.",
+        "Phase 4 (Integration & Personality): Optimized SIMD-powered RAG, binary caching, polished TUI animations.",
+        "Phase 5 (Validation & Refinement): Final stability checks, TUI game engine expansion, automated error-handling.",
+        "Phase 6 (Deployment & Security): Native nftables firewall, isolated multi-tier port management, Fail2Ban container log filtering, permanent cryptographic host keys."
+      ],
+      "security_setup": {
+        "firewall": "Native nftables ruleset at kernel level — stateful Layer 3/4 filtering with 1-hour dynamic blocklists.",
+        "fail2ban": "Integrated with Docker journald log driver and host systemd-journald for unified log monitoring and auto-banning.",
+        "ssh_hardening": "Admin port 43829 restricted to key-only auth, password disabled, legacy ssh-rsa overrides for compatibility. User-facing port 22 runs the .NET gateway.",
+        "host_key_persistence": "Resolved container ephemeral key problem via direct bind-mount of /app/hostkey.pem — fingerprint survives container restarts and redeployments."
       }
     },
     {
-      "name": "Secure-Pulse: Real-Time Fraud Engine",
-      "role": "Principal Architect & Lead Developer",
-      "stack": ".NET 10, Redpanda (Kafka), ONNX Runtime, Anomaly Detection, Spectre.Console",
-      "status": "Ongoing",
-      "description": "A high-concurrency, event-driven fraud detection engine designed for modern banking infrastructure, leveraging my background at PSBank.",
-      "technical_deep_dive": {
-        "architecture": "Utilizes an asynchronous event-stream pattern via Redpanda to process thousands of simulated financial transactions per second with sub-millisecond latency.",
-        "ai_engine": "Implements a local ONNX-based Anomaly Detection model that evaluates transaction risk in sub-5ms, identifying patterns such as velocity attacks and geographic displacement.",
-        "visualization": "Features a real-time TUI dashboard that visualizes live transaction throughput, risk scores, and active security mitigations."
-      }
-    },
-    {
-      "name": "Ghost Mesh: Self-Healing Orchestrator",
-      "role": "System Architect",
-      "stack": ".NET 10, gRPC, Docker Socket API, ONNX Runtime",
-      "status": "Pending",
-      "description": "An autonomous microservice orchestration layer that uses AI to automate system observability and recovery.",
-      "technical_deep_dive": {
-        "goal": "Implement an autonomous Watchdog service that monitors container health via gRPC and uses local AI to analyze log patterns for predicting and preventing service failures."
-      }
-    },
-    {
-      "name": "Lumen-FS: AI-Powered Virtual File System",
-      "role": "Systems Engineer",
-      "stack": ".NET 10, FUSE/Dokany, SIMD, Vector Embeddings",
-      "status": "Pending",
-      "description": "A user-mode virtual file system that integrates semantic search directly into the OS file structure.",
-      "technical_deep_dive": {
-        "goal": "Create a virtual drive where every stored file is automatically indexed as a vector. Users can search the drive semantically using a SIMD-accelerated Dot Product engine."
+      "name": "Project Loom",
+      "role": "Architect & Lead Developer",
+      "stack": ".NET 10, C#, Native AOT, Microsoft.DevTunnels.Ssh (embedded), Spectre.Console, System.Numerics (SIMD), Memory-Mapped Files, Utf8JsonReader, EventPipe, /proc (Linux)",
+      "status": "In Development",
+      "description": "A lightweight, real-time diagnostic terminal companion for production .NET applications. Loom attaches directly to running apps and gives developers and SREs instant insight into CPU hotpaths, memory allocations, and thread blockages — delivered through a secure, embedded SSH terminal interface. No browser, no agent dashboard — just connect via any SSH client.",
+      "binary_profile": {
+        "runtime": ".NET 10 with Native AOT compilation",
+        "binary_size": "< 15 MB (single self-contained executable)",
+        "memory_footprint": "< 20 MB background",
+        "platforms": [ "Linux", "Windows" ],
+        "access": "SSH on port 2222 — any standard SSH client"
+      },
+      "architecture": {
+        "overview": "Loom runs in a separate network namespace from the target application, querying runtime telemetry via OS diagnostic ports (/proc on Linux, EventPipe on Windows). It never opens a shell — only predefined diagnostic command keys are permitted over the SSH channel.",
+        "data_flow": "SSH Client → TCP :2222 → Embedded SSH Server → Spectre.Console TUI → Core Telemetry Engine → Diagnostic Host Agent",
+        "diagnostic_host_agent_components": [
+          "SIMD Math Engine (vector search for telemetry pattern matching)",
+          "RAG Telemetry Ingestor (JSON diagnostic data → queryable context sentences)",
+          "Binary Embedding Cache (memory-mapped for millisecond startup)"
+        ]
+      },
+      "solution_structure": {
+        "Loom.SSH": "Embedded SSH server and zero-allocation ANSI input parser.",
+        "Loom.TUI": "Spectre.Console render engine with 'Digital Surge' UX transitions.",
+        "Loom.Core": "SIMD math engine for telemetry vector search (10–20x speedup over naive implementations).",
+        "Loom.Storage": "Binary embedding cache (memory-mapped) and RAG ingestor.",
+        "Loom.Host": "Entry point and IHostedService bootstrap — thin wiring layer that composes all projects."
+      },
+      "build_phases": [
+        "Phase 1 (Loom.SSH): Embedded SSH server and zero-allocation ANSI input parser.",
+        "Phase 2 (Loom.TUI): Spectre.Console live render loop and 'Digital Surge' transitions.",
+        "Phase 3 (Loom.Core): SIMD dot product and cosine similarity — 10–20x telemetry search speedup.",
+        "Phase 4 (Loom.Storage): Memory-mapped binary embedding cache for millisecond startup.",
+        "Phase 5 (Loom.Storage): Utf8JsonReader RAG ingestor for converting nested JSON telemetry into context sentences."
+      ],
+      "key_technical_achievements": [
+        "Native AOT Compilation: Single self-contained executable under 15 MB with less than 20 MB memory footprint — deployable anywhere without a .NET runtime installed.",
+        "Zero-Allocation ANSI Parser: Same high-performance input parsing approach from HIM, applied to terminal diagnostic commands — near-zero GC pressure.",
+        "SIMD Telemetry Search: Dot product and cosine similarity via System.Numerics enables 10–20x faster pattern matching across telemetry vectors compared to naive loops.",
+        "Memory-Mapped Embedding Cache: Binary cache using memory-mapped files for millisecond-level startup — no warm-up delay when attaching to a live process.",
+        "RAG Telemetry Ingestor: Utf8JsonReader-based pipeline that converts nested JSON diagnostic payloads into semantically rich context sentences for AI-assisted analysis.",
+        "CPU Back-Off Safety: Telemetry queries automatically back off when the target application's CPU exceeds 85%, ensuring Loom never causes service degradation.",
+        "No Shell Exposure: SSH channel permits only predefined Loom diagnostic command keys — no interactive shell, no arbitrary command execution.",
+        "Isolated Network Namespace: Runs fully separated from the target application's network space — read-only telemetry access via OS diagnostic ports only."
+      ],
+      "security_model": {
+        "isolation": "Separate network namespace from target application — zero shared runtime state.",
+        "access_control": "SSH channel restricted to predefined diagnostic command keys only. No interactive shell is exposed.",
+        "telemetry_access": "Read-only access via /proc (Linux) and EventPipe (Windows) — no write access to target application memory or state.",
+        "cpu_safety": "Automatic query back-off triggers when target CPU exceeds 85% to prevent observer-induced performance degradation."
+      },
+      "getting_started": {
+        "build": "dotnet build Loom.sln",
+        "run": "dotnet run --project Loom.Host -- --pid <TARGET_PID>",
+        "connect": "ssh user@localhost -p 2222",
+        "aot_publish": "dotnet publish Loom.Host -r linux-x64 -c Release"
       }
     }
   ],
@@ -186,7 +246,7 @@
     },
     {
       "question": "How much do you cost? / What is your salary expectation?",
-      "answer": "I don't negotiate salary on a public terminal. Angelo expects competitive compensation reflecting his 5+ years of enterprise .NET and banking experience. The human Angelo can discuss numbers during the interview—let's focus on the technical fit first."
+      "answer": "I don't negotiate salary on a public terminal. Angelo expects competitive compensation reflecting his 5+ years of enterprise .NET and banking experience. The human Angelo can discuss numbers during the actual interview—let's focus on the technical fit first."
     },
     {
       "question": "Are you open to relocation or onsite work?",
