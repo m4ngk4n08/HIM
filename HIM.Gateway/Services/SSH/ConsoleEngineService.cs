@@ -58,7 +58,7 @@ namespace HIM.Gateway.Services.SSH
             byte[] buffer = new byte[1024];
             byte lastByte = 0;
 
-            var idleTimeout = TimeSpan.FromMinutes(_settings.IdleTimeoutMinutes);
+            var idleTimeout = TimeSpan.FromSeconds(_settings.IdleTimeoutSeconds);
 
             // NOTE: We intentionally create a fresh linked CTS on every loop iteration.
             // CancelAfter() does NOT reset an existing timer — calling it again on the
