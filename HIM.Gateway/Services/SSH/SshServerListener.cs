@@ -370,7 +370,27 @@ namespace HIM.Gateway.Services.SSH
             };
 
             using var stream = client.GetStream();
-            await session.ConnectAsync(stream, sessionCts.Token);
+
+            // ── Handshake-Specific Disarmable Timeout ─────────────────────────
+            // Create a dedicated CTS for the handshake phase, linked to the main session token.
+            using var handshakeCts = CancellationTokenSource.CreateLinkedTokenSource(sessionCts.Token);
+            // Enforce a strict 15-second timeout limit for the cryptographic SSH handshake.
+            handshakeCts.CancelAfter(TimeSpan.FromSeconds(15));
+
+            try
+            {
+                // Pass the handshake-specific token to ConnectAsync.
+                await session.ConnectAsync(stream, handshakeCts.Token);
+
+                // DISARM: Handshake completed successfully. Disable the timeout 
+                // immediately so the ongoing session can run indefinitely.
+                handshakeCts.CancelAfter(Timeout.InfiniteTimeSpan);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                // If the host was not shutting down, the cancellation originated from the handshake timer.
+                throw new TimeoutException("SSH handshake timed out after 15 seconds.");
+            }
 
             _logger.LogInformation(
                 "[Gateway] {Timestamp:yyyy-MM-dd HH:mm:ss} UTC | Session negotiated | " +
