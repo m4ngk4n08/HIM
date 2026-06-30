@@ -469,6 +469,15 @@ namespace HIM.Gateway.Services.SSH
                             ipAddress,
                             e.RequestType,
                             channel.Session.Principal?.Identity?.Name ?? "unknown");
+
+                        try
+                        {
+                            _ = channel.Session.CloseAsync(SshDisconnectReason.ByApplication, "Execution Rejected");
+                        }
+                        catch (Exception)
+                        {
+                            // Ignore safe cleanup exceptions
+                        }
                         break;
                 }
             };
