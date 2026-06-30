@@ -1,6 +1,6 @@
 # HIM (Heuristic Interactive Mockup) - AI SSH Portfolio
 
-HIM is a next-generation interactive portfolio experience delivered via the SSH protocol. It features a custom SSH gateway and a .NET 10 microservices architecture to provide an AI-powered terminal interface that feels "Gen Z" elegant—professional, technical, and witty.
+HIM is an interactive portfolio experience delivered via the SSH protocol. It features a custom SSH gateway and a .NET 10 microservices architecture to provide an AI-powered terminal interface designed to be professional, technical, and witty.
 
 ## 🚦 Project Status: **Phase 6 (Deployment & Security) - COMPLETED**
 - ✅ **Phase 1 (AI Service):** Completed. Manual RAG pipeline implemented with Llama3 and all-minilm.
@@ -13,15 +13,15 @@ HIM is a next-generation interactive portfolio experience delivered via the SSH 
 ## 🚀 Key Technical Achievements
 - **Pluggable TUI Game Engine:** Developed a decoupled gaming framework using Strategy & Factory patterns, enabling real-time, interactive games (like Trivia, RegexQuest, and CodeDebugger) over SSH.
 - **Zero-Allocation Input System:** Implemented a high-performance ANSI parsing service that converts raw SSH byte-streams into game inputs with near-zero GC pressure.
-- **High-Energy UX:** Created a "Digital Surge" transition system using `Spectre.Console.Live` for immersive, full-screen animations.
+- **High-Energy UX:** Created a transition system using `Spectre.Console.Live` for immersive, full-screen animations.
 - **SIMD-Accelerated Math:** High-performance vector normalization and Dot Product calculations using `System.Numerics`, making vector search lightning fast.
 - **Binary Embedding Cache:** Implemented a custom binary persistence layer for embeddings, reducing AI service startup time from seconds to milliseconds.
 - **High-Context RAG Ingestion:** Developed a recursive JSON flattener that consolidates objects (like work experiences) into semantically rich sentences for better LLM accuracy.
-- **Polished SSH UX:** Integrated synchronized spinners and a smooth character-by-character "typing" delay to simulate a real terminal interaction.
+- **Polished SSH UX:** Integrated synchronized spinners and a character-by-character "typing" delay to simulate a real terminal interaction.
 - **Robust TUI Architecture:** Hardened with markup escaping and optimized HTTP streaming to prevent session crashes and handle network latency.
-- **Production-Hardened SSH Architecture (Path B):** Separated VPS admin access onto hardened OpenSSH port `43829` (key-only, disabled passwords, legacy `ssh-rsa` compatibility overrides) while keeping the custom `.NET` gateway on port `22` for frictionless user connections (`ssh angelodavales.info`).
-- **Kernel-Level Rate Limiting (nftables):** Deployed a native `nftables` stateful ruleset that filters incoming connections on port `22` and port `43829`. It dynamically blocks attackers at Layer 3/4 (using 1-hour blocklists) before they can consume container connection slots, preventing connection-slot starvation.
-- **Persistent Host Key Management:** Resolved the `.NET` container permission denied boundary and the C# `File.Exists` 0-byte file trap by implementing a direct file-level bind-mount for `/app/hostkey.pem`, stabilizing the host fingerprint permanently across continuous delivery cycles.
+- **Production-Hardened SSH Architecture (Path B):** Separated VPS admin access onto hardened OpenSSH port `43829` (key-only, disabled passwords, legacy `ssh-rsa` compatibility overrides) while keeping the custom `.NET` gateway on port `22` for frictionless user connections (`ssh angelodavales.info`) [2, 3].
+- **Kernel-Level Rate Limiting (nftables):** Deployed a native `nftables` stateful ruleset that filters incoming connections on port `22` and port `43829` [2]. It blocks attackers at Layer 3/4 (using 1-hour blocklists) before they can consume container connection slots, preventing connection-slot starvation [1].
+- **Persistent Host Key Management:** Resolved the `.NET` container permission denied boundary and the C# `File.Exists` 0-byte file trap by implementing a direct file-level bind-mount for `/app/hostkey.pem`, stabilizing the host fingerprint permanently across continuous delivery cycles [1].
 - **Docker-to-Host Security Bridging:** Implemented Fail2Ban integration with both host systemd-journald and container log streams, dynamically banning bots that trigger rate limits or malicious username requests.
 
 ## 🏗️ Architecture
@@ -39,9 +39,13 @@ HIM is a next-generation interactive portfolio experience delivered via the SSH 
 - **Security:** `nftables` (kernel-level packet filtering), Fail2Ban (journald integration).
 
 ## 🛡️ Host Hardening & Production Setup
-To run this application in a production Internet-facing environment, the host VPS must be configured as follows to prevent brute-forcing and connection slot exhaustion:
+To run this application in a production Internet-facing environment, the host VPS must be configured to prevent brute-forcing and connection slot exhaustion. 
 
-### 1. Docker Daemon Logging Integration
+For a complete, in-depth architectural breakdown of our security controls—including Netfilter bypass mitigation and non-root volume bootstrapping—please refer to the [Security Architecture and Hardening Reference](https://github.com/m4ngk4n08/markdowns/blob/main/security-architecture.md).
+
+### Quick Setup Steps
+
+#### 1. Docker Daemon Logging Integration
 By default, Docker uses the `json-file` logging driver, which isolates container console output from host monitoring tools. You must configure Docker to log directly to `journald` so that Fail2Ban can parse container events natively:
 1. Edit `/etc/docker/daemon.json` and append:
    ```json
