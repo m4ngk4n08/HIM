@@ -1,4 +1,3 @@
-```markdown
 # HIM (Heuristic Interactive Mockup) - AI SSH Portfolio
 
 HIM is an interactive portfolio experience delivered via the SSH protocol. It features a custom SSH gateway and a .NET 10 microservices architecture to provide an AI-powered terminal interface designed to be professional, technical, and witty.
@@ -31,7 +30,6 @@ HIM is an interactive portfolio experience delivered via the SSH protocol. It fe
 2. **HIM.AiService:** A RAG-based microservice for intelligent responses, optimized with hardware acceleration.
 3. **TUI Application:** The interactive frontend integrated directly into the Gateway's session handling.
 
-```
                                   [ INTERNET ]
                                        |
                 +----------------------+----------------------+
@@ -55,7 +53,6 @@ HIM is an interactive portfolio experience delivered via the SSH protocol. It fe
        [ him-ai Container ]
         - Bound to port 8080
         - Invisible to the public internet
-```
 
 ## 🛡️ Security & Resilience Architecture
 
@@ -128,4 +125,3 @@ By default, Docker uses the `json-file` logging driver, which isolates container
    ```bash
    sudo systemctl restart docker
    ```
-```
