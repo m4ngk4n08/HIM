@@ -29,7 +29,7 @@ HIM is an interactive portfolio experience delivered via the SSH protocol. It fe
 1. **HIM.Gateway:** The SSH server entry point (Console .NET 10). Manages TUI rendering, session lifecycle, and the pluggable Game Engine.
 2. **HIM.AiService:** A RAG-based microservice for intelligent responses, optimized with hardware acceleration.
 3. **TUI Application:** The interactive frontend integrated directly into the Gateway's session handling.
-
+```
                                   [ INTERNET ]
                                        |
                 +----------------------+----------------------+
@@ -53,7 +53,7 @@ HIM is an interactive portfolio experience delivered via the SSH protocol. It fe
        [ him-ai Container ]
         - Bound to port 8080
         - Invisible to the public internet
-
+```
 ## 🛡️ Security & Resilience Architecture
 
 To operate safely on standard Port 22, the gateway incorporates a highly hardened, lock-free application pipeline designed to resist automated scanning, connection-flooding, and slow-loris attacks [1, 1.1.2]:
