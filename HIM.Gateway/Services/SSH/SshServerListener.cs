@@ -522,9 +522,17 @@ namespace HIM.Gateway.Services.SSH
                             safeType,
                             safeUser);
 
+                        // Fire and forget a task that yields for 100ms.
+                        // this gives the framework engough time to send the "Unauthorized" packet
+                        // cleanly to the client before we teardown the SshSession.
                         try
                         {
-                            _ = channel.Session.CloseAsync(SshDisconnectReason.ByApplication, "Execution Rejected");
+                            _ = Task.Run(async () =>
+                            {
+                                await Task.Delay(100);
+                                await channel.Session.CloseAsync(SshDisconnectReason.ByApplication, "Execution Rejected");
+
+                            });
                         }
                         catch (Exception)
                         {
