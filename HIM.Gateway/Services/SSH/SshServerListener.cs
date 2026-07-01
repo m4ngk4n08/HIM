@@ -11,23 +11,31 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using System.Text.RegularExpressions;
 
 namespace HIM.Gateway.Services.SSH
 {
     /// <summary>
-    /// TCP/SSH gateway with 6-layer bot defense.
+    /// TCP/SSH gateway with 8-layer bot defense.
     ///
     /// Defense layers (in order of evaluation — cheapest checks first):
     /// ──────────────────────────────────────────────────────────────────
     ///  Layer 1 │ IP BanList          │ Lock-free ConcurrentDictionary read
-    ///  Layer 2 │ Tarpit on reject    │ Fire-and-forget Task.Delay, never blocks accept loop
+    ///  Layer 2 │ Tarpit on reject    │ Bounded concurrent tarpitting thread guard
     ///  Layer 3 │ Global flood guard  │ CAS-based token bucket, zero locks
-    ///  Layer 4 │ Per-IP rate limit   │ Sliding window with bounded history list
+    ///  Layer 4 │ Per-IP rate limit   │ Lock-free sliding window via ConcurrentQueue sharding
     ///  Layer 5 │ Per-IP concurrency  │ Interlocked counter via ConcurrentDictionary
-    ///  Layer 6 │ Idle timeout        │ Linked CancellationTokenSource with CancelAfter
+    ///  Layer 6 │ Handshake Timeout   │ Linked CancellationTokenSource with CancelAfter
+    ///  Layer 7 │ Negotiation Timeout │ Linked countdown enforcing shell channel request
+    ///  Layer 8 │ Idle timeout        │ Linked CancellationTokenSource with CancelAfter (TUI)
     /// </summary>
     public class SshServerListener : ISshServerListener
     {
+        // ── Tuning Constants ──────────────────────────────────────────────
+        private const int HandshakeTimeoutSeconds = 15;
+        private const int NegotiationTimeoutSeconds = 15;
+        private const int MaxConcurrentTarpits = 100; // Hard cap to prevent Thread Pool exhaustion
+
         // ── Injected Dependencies ─────────────────────────────────────────
         private readonly ITuiEngine _tuiEngine;
         private readonly IHostKeyService _hostKeyService;
@@ -43,11 +51,8 @@ namespace HIM.Gateway.Services.SSH
         // Active concurrent connection count per IP. Interlocked via AddOrUpdate.
         private readonly ConcurrentDictionary<string, int> _activeConnectionsPerIp = new();
 
-        // Sliding-window history per IP. Values are bounded to RateLimitMaxAttempts.
-        // Protected by _historyLock (fine-grained enough: lock is held only for
-        // O(n) prune where n ≤ RateLimitMaxAttempts, so max n = 10 items).
-        private readonly ConcurrentDictionary<string, List<DateTime>> _connectionHistory = new();
-        private readonly object _historyLock = new();
+        // Lock-Free Sliding-window history per IP. Eliminates global lock contention under DDoS.
+        private readonly ConcurrentDictionary<string, ConcurrentQueue<DateTime>> _connectionHistory = new();
 
         // ── Global Flood Guard — Lock-free Token Bucket ───────────────────
         // _floodWindowStart: TickCount64 of when the current 1-second window began.
@@ -55,6 +60,9 @@ namespace HIM.Gateway.Services.SSH
         // Both are manipulated exclusively through Interlocked/CAS operations.
         private long _floodWindowStart = Environment.TickCount64;
         private int _floodWindowCount;
+
+        // ── Bounded Tarpit Tracking ───────────────────────────────────────
+        private int _activeTarpits;
 
         // ── Periodic History Pruning (memory safety) ──────────────────────
         private int _acceptCounter;
@@ -154,6 +162,9 @@ namespace HIM.Gateway.Services.SSH
                         if (Interlocked.Increment(ref _acceptCounter) % PruneHistoryEvery == 0)
                             _ = Task.Run(PruneConnectionHistory);
 
+                        // Configure OS Socket-Level TCP Keep-Alives (Dead Connection Reclamation)
+                        ConfigureSocketKeepAlive(tcpClient.Client);
+
                         // All checks passed — hand off to connection handler.
                         _ = Task.Run(() => HandleConnectionSafelyAsync(tcpClient, ipAddress, cancellationToken),
                             cancellationToken);
@@ -218,36 +229,34 @@ namespace HIM.Gateway.Services.SSH
         /// Returns true if the IP is allowed to proceed; false if it violated
         /// either the sliding-window rate limit or the concurrent connection cap.
         /// On failure, a strike is recorded in IpBanService.
+        /// Optimized to use lock-free queues, eliminating lock contention bottlenecks under DDoS.
         /// </summary>
         private bool IsAllowedAndTrack(string ipAddress)
         {
             var now = DateTime.UtcNow;
 
-            // ── Layer 4: Sliding-window rate limit ────────────────────────
-            lock (_historyLock)
+            // ── Layer 4: Sliding-window rate limit (Lock-Free) ────────────
+            var history = _connectionHistory.GetOrAdd(ipAddress, _ => new ConcurrentQueue<DateTime>());
+
+            // Prune old entries out of the queue snapshot asynchronously
+            var cutoff = now.AddSeconds(-_settings.RateLimitWindowSeconds);
+            while (history.TryPeek(out var oldest) && oldest < cutoff)
             {
-                if (!_connectionHistory.TryGetValue(ipAddress, out var history))
-                {
-                    history = new List<DateTime>(_settings.RateLimitMaxAttempts + 1);
-                    _connectionHistory[ipAddress] = history;
-                }
-
-                // Prune entries outside the rolling window (O(n), n ≤ MaxAttempts)
-                history.RemoveAll(t => (now - t).TotalSeconds > _settings.RateLimitWindowSeconds);
-
-                if (history.Count >= _settings.RateLimitMaxAttempts)
-                {
-                    _ipBanService.RecordStrike(ipAddress);
-                    _logger.LogWarning(
-                        "[Security] {Timestamp:yyyy-MM-dd HH:mm:ss} UTC | RATE LIMIT | " +
-                        "IP: {IpAddress} | Attempts: {Count}/{Max} in {Window}s",
-                        DateTime.UtcNow, ipAddress,
-                        history.Count, _settings.RateLimitMaxAttempts, _settings.RateLimitWindowSeconds);
-                    return false;
-                }
-
-                history.Add(now);
+                history.TryDequeue(out _);
             }
+
+            if (history.Count >= _settings.RateLimitMaxAttempts)
+            {
+                _ipBanService.RecordStrike(ipAddress);
+                _logger.LogWarning(
+                    "[Security] {Timestamp:yyyy-MM-dd HH:mm:ss} UTC | RATE LIMIT | " +
+                    "IP: {IpAddress} | Attempts: {Count}/{Max} in {Window}s",
+                    DateTime.UtcNow, ipAddress,
+                    history.Count, _settings.RateLimitMaxAttempts, _settings.RateLimitWindowSeconds);
+                return false;
+            }
+
+            history.Enqueue(now);
 
             // ── Layer 5: Concurrent connection cap ────────────────────────
             int active = _activeConnectionsPerIp.AddOrUpdate(ipAddress, 1, (_, val) => val + 1);
@@ -269,12 +278,23 @@ namespace HIM.Gateway.Services.SSH
 
         /// <summary>
         /// Holds a rejected socket open for TarpitDelayMs before closing it.
-        /// Runs entirely on the thread pool — the accept loop is never blocked.
-        /// Dramatically reduces bot scan throughput (each probe wastes ~1.5s of
-        /// the bot's connection pool).
+        /// Bounded via Interlocked counter. Prevents memory exhaustion attacks
+        /// from spawning millions of idle Delay tasks under volumetric connection flooding.
         /// </summary>
         private void TarpitAndReject(TcpClient client, string ipAddress, string reason)
         {
+            // Safeguard: If the concurrent tarpit count exceeds safety levels, bypass the delay and reject immediately.
+            if (Interlocked.Increment(ref _activeTarpits) > MaxConcurrentTarpits)
+            {
+                Interlocked.Decrement(ref _activeTarpits);
+                _logger.LogWarning(
+                    "[Security] {Timestamp:yyyy-MM-dd HH:mm:ss} UTC | TARPIT BYPASS | " +
+                    "IP: {IpAddress} | Reason: {Reason} | Max concurrent tarpits reached. Dropping connection immediately.",
+                    DateTime.UtcNow, ipAddress, reason);
+                try { client.Close(); } catch { }
+                return;
+            }
+
             _ = Task.Run(async () =>
             {
                 try
@@ -288,6 +308,7 @@ namespace HIM.Gateway.Services.SSH
                 }
                 finally
                 {
+                    Interlocked.Decrement(ref _activeTarpits);
                     try { client.Close(); } catch { /* socket already closed — ignore */ }
                 }
             });
@@ -335,7 +356,7 @@ namespace HIM.Gateway.Services.SSH
             var trace = new TraceSource("SshServerLogger", SourceLevels.Warning);
             trace.Listeners.Add(new ConsoleTraceListener());
 
-            // ── Layer 6: Idle Timeout (owned by ConsoleEngineService) ───────────
+            // ── Layer 8: Idle Timeout (owned by ConsoleEngineService) ───────────
             // The actual idle timeout — which resets on EVERY user keystroke — is
             // implemented inside ConsoleEngineService.HandleInteractionLoopAsync via
             // a per-read CancelAfter. This session-level CTS is intentionally NOT
@@ -360,22 +381,30 @@ namespace HIM.Gateway.Services.SSH
 
             session.Authenticating += (sender, e) => _authenticationService.Authenticate(sender, e);
 
+            // ── Layer 7: Pre-shell Negotiation Timeout ───────────────────────
+            // This timer ensures that if a bot negotiates a session but never starts the TUI shell,
+            // we forcibly disconnect them after 15 seconds. This prevents bots from holding open sessions 
+            // indefinitely without actually using them.
+            using var negotiationCts = CancellationTokenSource.CreateLinkedTokenSource(sessionCts.Token);
+            negotiationCts.CancelAfter(TimeSpan.FromSeconds(NegotiationTimeoutSeconds));
+
             session.ChannelOpening += async (sender, e) =>
             {
                 if (e.Channel.ChannelType == "session")
                 {
                     var channel = await e.Channel.Session.AcceptChannelAsync(sessionCts.Token);
-                    _ = Task.Run(() => HandleShellChannelAsync(channel, ipAddress, sessionCts.Token));
+                    // Pass the negotiation CTS down to the shell handler so it can be disarmed upon shell launch
+                    _ = Task.Run(() => HandleShellChannelAsync(channel, ipAddress, sessionCts.Token, negotiationCts));
                 }
             };
 
             using var stream = client.GetStream();
 
-            // ── Handshake-Specific Disarmable Timeout ─────────────────────────
+            // ── Layer 6: Handshake-Specific Disarmable Timeout ─────────────────
             // Create a dedicated CTS for the handshake phase, linked to the main session token.
             using var handshakeCts = CancellationTokenSource.CreateLinkedTokenSource(sessionCts.Token);
             // Enforce a strict 15-second timeout limit for the cryptographic SSH handshake.
-            handshakeCts.CancelAfter(TimeSpan.FromSeconds(15));
+            handshakeCts.CancelAfter(TimeSpan.FromSeconds(HandshakeTimeoutSeconds));
 
             try
             {
@@ -389,7 +418,7 @@ namespace HIM.Gateway.Services.SSH
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
                 // If the host was not shutting down, the cancellation originated from the handshake timer.
-                throw new TimeoutException("SSH handshake timed out after 15 seconds.");
+                throw new TimeoutException($"SSH handshake timed out after {HandshakeTimeoutSeconds} seconds.");
             }
 
             _logger.LogInformation(
@@ -400,6 +429,19 @@ namespace HIM.Gateway.Services.SSH
             var sessionClosedTcs = new TaskCompletionSource<bool>(
                 TaskCreationOptions.RunContinuationsAsynchronously);
             session.Closed += (_, _) => sessionClosedTcs.TrySetResult(true);
+
+            // Monitor the pre-shell countdown. If the 15 seconds expires before the shell is launched, close the session.
+            using var negotiationReg = negotiationCts.Token.Register(() =>
+            {
+                if (!sessionCts.Token.IsCancellationRequested && !sessionClosedTcs.Task.IsCompleted)
+                {
+                    _logger.LogWarning(
+                        "[Security] {Timestamp:yyyy-MM-dd HH:mm:ss} UTC | SESSION IDLE TIMEOUT | " +
+                        "Forcibly disconnecting idle session before shell launch | IP: {IpAddress}",
+                        DateTime.UtcNow, ipAddress);
+                    _ = session.CloseAsync(SshDisconnectReason.ByApplication, "Session idle timeout before shell execution.");
+                }
+            });
 
             // If the host shuts down (Ctrl+C / SIGINT) while the session is open,
             // cancel the TCS so HandleConnectionAsync unblocks and cleans up.
@@ -424,7 +466,7 @@ namespace HIM.Gateway.Services.SSH
             }
         }
 
-        private void HandleShellChannelAsync(SshChannel channel, string ipAddress, CancellationToken sessionToken)
+        private void HandleShellChannelAsync(SshChannel channel, string ipAddress, CancellationToken sessionToken, CancellationTokenSource negotiationCts)
         {
             var channelCts = CancellationTokenSource.CreateLinkedTokenSource(sessionToken);
             channel.Closed += (_, _) => { try { channelCts.Cancel(); } catch { } };
@@ -454,6 +496,11 @@ namespace HIM.Gateway.Services.SSH
 
                     case "shell":
                         e.IsAuthorized = true;
+
+                        // DISARM: The shell is launching. Disable the 15-second countdown.
+                        // Interactive keyboard idle timeout in TUI engine will now take over.
+                        try { negotiationCts.CancelAfter(Timeout.InfiniteTimeSpan); } catch { }
+
                         if (!channelCts.IsCancellationRequested)  // <-- guard
                         {
                             _ = Task.Run(() => _tuiEngine.RunAsync(
@@ -463,12 +510,17 @@ namespace HIM.Gateway.Services.SSH
 
                     default:
                         e.IsAuthorized = false;
+
+                        // Defend against log-injection attacks by sanitizing variables parsed directly from the network
+                        var safeUser = SanitizeLogInput(channel.Session.Principal?.Identity?.Name);
+                        var safeType = SanitizeLogInput(e.RequestType);
+
                         _logger.LogWarning(
                             "[Security] {Timestamp} | REJECTED request | IP: {IP} | Type: {Type} | User: {User}",
                             DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss 'UTC'"),
                             ipAddress,
-                            e.RequestType,
-                            channel.Session.Principal?.Identity?.Name ?? "unknown");
+                            safeType,
+                            safeUser);
 
                         try
                         {
@@ -484,6 +536,50 @@ namespace HIM.Gateway.Services.SSH
         }
 
         // ── Private Utilities ─────────────────────────────────────────────
+
+        /// <summary>
+        /// Sanitizes strings parsed from network inputs before sending them to the logging pipeline,
+        /// shielding Fail2Ban from CRLF spoofing or ANSI log injection attacks.
+        /// </summary>
+        private static string SanitizeLogInput(string? input, int maxLength = 50)
+        {
+            if (string.IsNullOrEmpty(input)) return "unknown";
+
+            var truncated = input.Length > maxLength ? input.Substring(0, maxLength) : input;
+
+            // Strip any control characters, carriage returns, and newlines
+            var clean = Regex.Replace(truncated, @"[\p{C}\r\n]", string.Empty);
+
+            // Strip ANSI color/terminal escape codes
+            return Regex.Replace(clean, @"\x1B\[[^@-_]*[0-9a-zA-Z]", string.Empty);
+        }
+
+        /// <summary>
+        /// Configures platform-independent aggressive TCP keep-alives at the OS-socket level.
+        /// Reclaims "half-open" dead connections from silent network drops in minutes instead of hours.
+        /// </summary>
+        private void ConfigureSocketKeepAlive(Socket socket)
+        {
+            try
+            {
+                // 1. Enable TCP Keep-Alives on the socket
+                socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
+
+                // 2. Configure Keep-Alive parameters (Natively supported since .NET Core 3.0+)
+                // Wait 60 seconds without activity before sending the first probe
+                socket.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveTime, 60);
+
+                // Wait 10 seconds between subsequent unanswered probes
+                socket.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveInterval, 10);
+
+                // Terminate the connection after 5 consecutive failed probes
+                socket.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveRetryCount, 5);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "[Gateway] Socket-level TCP Keep-Alive configuration failed. Falling back to OS defaults.");
+            }
+        }
 
         private void DecrementActiveConnection(string ipAddress)
         {
@@ -503,22 +599,24 @@ namespace HIM.Gateway.Services.SSH
         /// every PruneHistoryEvery accepted connections.
         /// Memory safety guarantee: dictionary size is bounded by the number
         /// of unique IPs seen within any given window, not cumulative lifetime.
+        /// Lock-Free implementation using ConcurrentQueue structures.
         /// </summary>
         private void PruneConnectionHistory()
         {
             var cutoff = DateTime.UtcNow.AddSeconds(-_settings.RateLimitWindowSeconds);
             var toRemove = new List<string>();
 
-            lock (_historyLock)
+            foreach (var (key, history) in _connectionHistory)
             {
-                foreach (var (key, history) in _connectionHistory)
+                while (history.TryPeek(out var oldest) && oldest < cutoff)
                 {
-                    history.RemoveAll(t => t < cutoff);
-                    if (history.Count == 0) toRemove.Add(key);
+                    history.TryDequeue(out _);
                 }
-                foreach (var key in toRemove)
-                    _connectionHistory.TryRemove(key, out _);
+                if (history.IsEmpty) toRemove.Add(key);
             }
+
+            foreach (var key in toRemove)
+                _connectionHistory.TryRemove(key, out _);
 
             _logger.LogDebug(
                 "[Gateway] {Timestamp:yyyy-MM-dd HH:mm:ss} UTC | History pruned | " +
