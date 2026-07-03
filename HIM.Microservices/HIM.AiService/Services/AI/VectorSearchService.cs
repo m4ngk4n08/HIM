@@ -5,7 +5,7 @@ namespace HIM.AiService.Services.AI
 {
     public class VectorSearchService : IVectorSearchService
     {
-        public float CalculateCosineSimilarity(ReadOnlySpan<float> a, ReadOnlySpan<float> b)
+        public float CalculateDotProduct(ReadOnlySpan<float> a, ReadOnlySpan<float> b)
         {
             if (a.Length != b.Length || a.Length == 0) return 0;
 

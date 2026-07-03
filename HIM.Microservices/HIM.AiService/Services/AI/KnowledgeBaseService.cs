@@ -156,7 +156,7 @@ namespace HIM.AiService.Services.AI
 
             foreach (var chunk in _chunks)
             {
-                float similarity = _vectorsearchService.CalculateCosineSimilarity(queryEmbedding, chunk.Vector);
+                float similarity = _vectorsearchService.CalculateDotProduct(queryEmbedding, chunk.Vector);
                 pq.Enqueue(chunk, similarity); // Negative because PriorityQueue is a Min-Heap by default
 
                 if (pq.Count > topK) pq.Dequeue();
