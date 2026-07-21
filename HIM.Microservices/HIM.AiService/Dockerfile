@@ -10,9 +10,9 @@ RUN dotnet publish "HIM.AiService.csproj" -c Release -o /app/publish
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 
-# Create a non‑root user and group (UID/GID 1000)
-RUN addgroup --gid 1000 himgroup && \
-    adduser --uid 1000 --gid 1000 --disabled-password --gecos "" himuser
+# Create a non‑root user and group (UID/GID 1000) – using full paths
+RUN /usr/sbin/addgroup --gid 1000 himgroup && \
+    /usr/sbin/adduser --uid 1000 --gid 1000 --disabled-password --gecos "" himuser
 
 # Copy the published app
 COPY --from=build /app/publish .
