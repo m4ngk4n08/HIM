@@ -53,8 +53,13 @@ namespace HIM.AiService.Services.AI
 
         public async Task<float[]> GetNormalizeLocalEmbeddingAsync(string text)
         {
+            const int maxSequenceLength = 512;
             // Get IDs directly as the library intended
             var ids = _tokenizer.EncodeToIds(text);
+
+            if (ids.Count > maxSequenceLength)
+                ids = ids.Take(maxSequenceLength).ToArray();
+
             var tokens = ids.Select(t => (long)t).ToArray();
 
             // Manually construct the attention mask

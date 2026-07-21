@@ -9,8 +9,40 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Polly;
 using Polly.Extensions.Http;
+using Serilog;
+using Serilog.Events;
+using Serilog.Formatting.Compact;
 
 var builder = Host.CreateApplicationBuilder(args);
+var logDir = Path.Combine(AppContext.BaseDirectory, "Logs");
+var logPath = Path.Combine(logDir, "gateway-log-.json");
+// In development, delete old log files to start fresh
+if (builder.Environment.IsDevelopment())
+{
+    if (Directory.Exists(logDir))
+    {
+        // Delete all .json log files from previous runs
+        foreach (var file in Directory.GetFiles(logDir, "*.json"))
+        {
+            try { File.Delete(file); } catch { /* ignore */ }
+        }
+    }
+}
+builder.Logging.AddSerilog(new LoggerConfiguration()
+    .ReadFrom.Configuration(builder.Configuration)
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+    .MinimumLevel.Override("System", LogEventLevel.Warning)
+    .Enrich.FromLogContext()
+    .WriteTo.Console(new CompactJsonFormatter())
+    .WriteTo.File(
+        new CompactJsonFormatter(),
+        logPath,
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 30)
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("HIM", LogEventLevel.Debug)
+    .CreateLogger());
 
 builder.Configuration.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true);
 builder.Configuration.AddEnvironmentVariables(); // Ensure environment variables override appsettings.json

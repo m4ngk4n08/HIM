@@ -1,193 +1,290 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks.Dataflow;
+using HIM.Gateway.Extensions;
 using HIM.Gateway.Models;
 using HIM.Gateway.Models.Knowledge;
 using HIM.Gateway.Services.SSH.Interfaces;
 using HIM.Gateway.Services.SSH.Interfaces.ICommandDispatcher;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Serilog.Context;
 using Spectre.Console;
 
-namespace HIM.Gateway.Services.SSH
+namespace HIM.Gateway.Services.SSH;
+
+public class CommandService : ICommandService
 {
-    public class CommandService : ICommandService
+    private PortfolioData? _data;
+    private readonly IAiClientService _aiClientService;
+    private readonly IGameCommandService _gameCommandService;
+    private readonly IMenuCommandService _menuCommandService;
+    private readonly IStatsCommandService _statsCommandService;
+    private readonly IMatrixCommandService _matrixCommandService;
+    private readonly ICommandDispatcherHelper _commandDispatcherHelper;
+    private readonly ITerminalLayoutService _terminalLayoutService;
+    private readonly ILogger<CommandService> _logger;
+    private readonly KnowledgeBaseSettings _kbSettings;
+    private readonly TimeSpan _cooldownDuration = TimeSpan.FromSeconds(3);
+
+    private readonly ConditionalWeakTable<IAnsiConsole, UserSessionState> _sessionStates = new();
+
+    private class UserSessionState
     {
-        private PortfolioData? _data;
-        private readonly IAiClientService _aiClientService;
-        private readonly IGameCommandService _gameCommandService;
-        private readonly IMenuCommandService _menuCommandService;
-        private readonly IStatsCommandService _statsCommandService;
-        private readonly IMatrixCommandService _matrixCommandService;
-        private readonly ICommandDispatcherHelper _commandDispatcherHelper;
-        private readonly ITerminalLayoutService _terminalLayoutService;
-        private readonly KnowledgeBaseSettings _kbSettings;
-        private readonly TimeSpan _cooldownDuration = TimeSpan.FromSeconds(3);
-        private readonly ConditionalWeakTable<IAnsiConsole, UserCooldownState> _cooldowns = new();
+        public DateTime LastQuery { get; set; }
+        public string SessionId { get; } = Guid.NewGuid().ToString();
+    }
 
-        private class UserCooldownState { public DateTime LastQuery { get; set; } }
+    public CommandService(
+        IAiClientService aiClientService,
+        IGameCommandService gameCommandService,
+        IMenuCommandService menuCommandService,
+        IStatsCommandService statsCommandService,
+        IMatrixCommandService matrixCommandService,
+        ICommandDispatcherHelper commandDispatcherHelper,
+        ITerminalLayoutService terminalLayoutService,
+        ILogger<CommandService> logger,
+        IOptions<KnowledgeBaseSettings> kbSettings)
+    {
+        _kbSettings = kbSettings.Value;
+        _aiClientService = aiClientService;
+        _gameCommandService = gameCommandService;
+        _menuCommandService = menuCommandService;
+        _statsCommandService = statsCommandService;
+        _matrixCommandService = matrixCommandService;
+        _commandDispatcherHelper = commandDispatcherHelper;
+        _terminalLayoutService = terminalLayoutService;
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        LoadKnowledgeBase();
+    }
 
-        public CommandService(
-            IAiClientService aiClientService,
-            IGameCommandService gameCommandService,
-            IMenuCommandService menuCommandService,
-            IStatsCommandService statsCommandService,
-            IMatrixCommandService matrixCommandService,
-            ICommandDispatcherHelper commandDispatcherHelper,
-            ITerminalLayoutService terminalLayoutService,
-            IOptions<KnowledgeBaseSettings> kbSettings)
+    private void LoadKnowledgeBase()
+    {
+        try
         {
-            _kbSettings = kbSettings.Value;
-            _aiClientService = aiClientService;
-            _gameCommandService = gameCommandService;
-            _menuCommandService = menuCommandService;
-            _statsCommandService = statsCommandService;
-            _matrixCommandService = matrixCommandService;
-            _commandDispatcherHelper = commandDispatcherHelper;
-            _terminalLayoutService = terminalLayoutService;
-            LoadKnowledgeBase();
+            if (!File.Exists(_kbSettings.FilePath)) return;
+
+            var json = File.ReadAllText(_kbSettings.FilePath);
+            _data = JsonSerializer.Deserialize<PortfolioData>(json, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load knowledge base from {FilePath}", _kbSettings.FilePath);
+        }
+    }
+
+    private void LogWithSession(string sessionId, LogLevel level, string message, params object[] args)
+    {
+        using (LogContext.PushProperty("SessionId", sessionId))
+        using (LogContext.PushProperty("Source", "SSH"))
+        {
+            _logger.Log(level, message, args);
+        }
+    }
+
+    public async Task ProcessCommandAsync(IAnsiConsole console, string command, Stream stream, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(command)) return;
+
+        var sessionState = _sessionStates.GetOrCreateValue(console);
+        var sessionId = sessionState.SessionId;
+
+        var safeCommand = SanitizerExtension.Redact(command);
+        LogWithSession(sessionId, LogLevel.Information, "Command received: {Command}", safeCommand);
+
+        if (_data == null)
+        {
+            console.MarkupLine("[red]Error:[/] Knowledge base file not found or corrupted.");
+            return;
         }
 
-        private void LoadKnowledgeBase()
+        await _terminalLayoutService.InitializeTerminalLayoutAsync(console, stream, ct);
+
+        try
         {
-            try
-            {
-                if (!File.Exists(_kbSettings.FilePath)) return;
-
-                var json = File.ReadAllText(_kbSettings.FilePath);
-                _data = JsonSerializer.Deserialize<PortfolioData>(json, new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
-
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Internal error: KB load failed: {ex.Message}");
-            }
-        }
-
-        public async Task ProcessCommandAsync(IAnsiConsole console, string command, Stream stream, CancellationToken ct)
-        {
-            if (string.IsNullOrWhiteSpace(command)) return;
-
-            if(_data == null)
-            {
-                console.MarkupLine($"[red]Error:[/] Knowledge base file not found or corrupted.");
-                return;
-            }
-
-
-            await _terminalLayoutService.InitializeTerminalLayoutAsync(console, stream, ct);
-
-            var table = new Table();
-
             switch (command.ToLower())
             {
-                // Static commands
-                case "/help": ShowHelp(console, table); break;
+                case "/help":
+                    ShowHelp(console);
+                    break;
+
                 case "/clear":
                     await _terminalLayoutService.InitializeTerminalLayoutAsync(console, stream, ct);
                     break;
 
-                // Command Dispatch:
-                case "/menu": await _menuCommandService.ExecuteAsync(console, stream, _data, ct); break;
-                case "/stats": await _statsCommandService.ExecuteAsync(console, stream, _data, ct); break;
-                case "/matrix": await _matrixCommandService.ExecuteAsync(console, stream, ct); break;
-                case "/game": await _gameCommandService.ExecuteAsync(console, stream, ct); break;
-                
-                // Connection teardown
+                case "/menu":
+                    await _menuCommandService.ExecuteAsync(console, stream, _data, ct);
+                    break;
+
+                case "/stats":
+                    await _statsCommandService.ExecuteAsync(console, stream, _data, ct);
+                    break;
+
+                case "/matrix":
+                    await _matrixCommandService.ExecuteAsync(console, stream, ct);
+                    break;
+
+                case "/game":
+                    await _gameCommandService.ExecuteAsync(console, stream, ct);
+                    break;
+
                 case "/exit":
                     console.MarkupLine("[red]Closing connection... Goodbye![/]");
                     throw new OperationCanceledException();
-                
-                // Chat integration fallback
+
                 default:
-                    if(IsRateLimited(console))
+                    if(command.ToLower().StartsWith("/theme"))
+                    {
+                        HandleThemeCommand(console, command);
+                        break;
+                    }
+
+                    if (IsRateLimited(sessionState))
                     {
                         console.MarkupLine($"[yellow]![/] [grey]{Markup.Escape("Neural Link is cooling down.. please wait")}[/]");
                         break;
                     }
-                    await HandleAiChatAsync(console, command, ct);
+                    await HandleAiChatAsync(console, command, sessionId, ct);
                     break;
             }
         }
-
-        private bool IsRateLimited(IAnsiConsole console)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // Get or create the state for this specific user
-            var state = _cooldowns.GetOrCreateValue(console);
-            var now = DateTime.UtcNow;
-
-            if(now - state.LastQuery < _cooldownDuration)
-            {
-                return true; // still in cooldown
-            }
-
-            state.LastQuery = now;
-            return false;
+            LogWithSession(sessionId, LogLevel.Error, "Error executing command {Command}: {Error}", safeCommand, ex.Message);
+            console.MarkupLine($"[red]Error: {Markup.Escape(ex.Message)}[/]");
         }
+    }
 
-        private async Task HandleAiChatAsync(IAnsiConsole console, string question, CancellationToken ct)
+    private bool IsRateLimited(UserSessionState state)
+    {
+        var now = DateTime.UtcNow;
+        if (now - state.LastQuery < _cooldownDuration)
+            return true;
+        state.LastQuery = now;
+        return false;
+    }
+    private async Task HandleAiChatAsync(IAnsiConsole console, string question, string sessionId, CancellationToken ct)
+    {
+        console.WriteLine();
+        console.Write(new Markup("[cyan1]AI:[/] "));
+
+        var stopwatch = Stopwatch.StartNew();
+        StringBuilder? responseBuilder = _logger.IsEnabled(LogLevel.Debug) ? new StringBuilder() : null;
+
+        try
         {
-            console.WriteLine();
-            console.Write(new Markup("[cyan1]AI:[/]"));
+            var responsesStream = _aiClientService.GetAiResponseAsync(question, ct, sessionId);
+            await using var enumerator = responsesStream.GetAsyncEnumerator(ct);
 
-            try
-            {
-                // Initialize the stream but don't pull data yet
-                var responsesStream = _aiClientService.GetAiResponseAsync(question, ct);
-                await using var enumerator = responsesStream.GetAsyncEnumerator(ct);
-
-                // Show the spinner WHILE waiting for the first chunk to arrive.
-                bool hasData = await console.Status()
-                    .Spinner(Spinner.Known.Dots)
-                    .SpinnerStyle(Style.Parse("cyan1"))
-                    .StartAsync("Thinking..", async ctx =>
-                    {
-                        // this keeps the spinner spinning until the AI actually responds;
-                        return await enumerator.MoveNextAsync();
-                    });
-
-                if(hasData)
+            bool hasData = await console.Status()
+                .Spinner(Spinner.Known.Dots)
+                .SpinnerStyle(Style.Parse("cyan1"))
+                .StartAsync("Thinking..", async ctx =>
                 {
-                    // Render the first chunk immediately
-                    console.Write(new Text(enumerator.Current));
+                    return await enumerator.MoveNextAsync();
+                });
 
-                    // Render the rest with a "typing" effect
-                    while(await enumerator.MoveNextAsync())
-                    {
-                        console.Write(new Text(enumerator.Current));
+            if (hasData)
+            {
+                // Accumulate first chunk
+                var firstChunk = enumerator.Current;
+                responseBuilder?.Append(firstChunk);
 
-                        // this tiny delay(20ms) creates the smooth typing animation
-                        // even if the network is fast or buffering;
-                        await Task.Delay(20, ct);
-                    }
+                while (await enumerator.MoveNextAsync())
+                {
+                    var chunk = enumerator.Current;
+                    responseBuilder?.Append(chunk);
+                    await Task.Delay(20, ct);
                 }
             }
-            catch (Exception ex)
+
+            stopwatch.Stop();
+            var fullResponse = responseBuilder?.ToString() ?? "No response received.";
+
+            // Render the response as a panel only – no raw text written outside
+            console.WriteLine();
+            var panel = new Panel(new Text(fullResponse))
             {
-                // SENIOR FIX: Always .EscapeMarkup() on dynamic error strings
-                var safeMessage = ex.Message.EscapeMarkup();
-                console.MarkupLine($"[red]Error: {safeMessage}[/]");
+                Header = new PanelHeader($"🤖 AI • {stopwatch.ElapsedMilliseconds}ms", Justify.Left),
+                Border = BoxBorder.Rounded,
+                BorderStyle = new Style(ThemeService.PrimaryColor),
+                Padding = new Padding(1, 1)
+            };
+            console.Write(panel);
+
+            // Logging (unchanged)
+            var safeQuestion = SanitizerExtension.Redact(question);
+            LogWithSession(sessionId, LogLevel.Information,
+                "SSH AI chat completed. Question: {Question}, ResponseLength: {Length}, Duration: {Duration}ms",
+                safeQuestion, fullResponse.Length, stopwatch.ElapsedMilliseconds);
+
+            if (_logger.IsEnabled(LogLevel.Debug) && responseBuilder != null)
+            {
+                var safeResponse = SanitizerExtension.Redact(fullResponse);
+                LogWithSession(sessionId, LogLevel.Debug, "SSH AI response: {Response}", safeResponse);
             }
-
-            console.WriteLine();
-            console.WriteLine();
         }
-
-        private void ShowHelp(IAnsiConsole console, Table table)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            table.Border(TableBorder.Rounded).Title("[yellow]COMMANDS[/]");
-            table.AddColumn("Command").AddColumn("Description");
-            table.AddRow("/menu", "Interactive navigation menu")
-                 .AddRow("/stats", "Developer RPG stats sheet")
-                 .AddRow("/matrix", "Digital rain animation")
-                 .AddRow("/game", "Developer trivia game")
-                 .AddRow("/clear", "Clear screen").AddRow("/exit", "Logout");
-            console.Write(table);
+            LogWithSession(sessionId, LogLevel.Error, "Error during AI chat: {Error}", ex.Message);
+            var safeMessage = ex.Message.EscapeMarkup();
+            console.MarkupLine($"[red]Error: {safeMessage}[/]");
         }
+        finally
+        {
+            console.WriteLine();
+            console.WriteLine();
+        }
+    }
+    private void HandleThemeCommand(IAnsiConsole console, string command)
+    {
+        var parts = command.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2)
+        {
+            console.MarkupLine($"[{ThemeService.PrimaryColor}]Current theme: {ThemeService.CurrentTheme}[/]");
+            console.MarkupLine("[grey]Usage: /theme [dark|neon|retro][/]");
+            return;
+        }
+
+        var themeName = parts[1].ToLower();
+        var newTheme = themeName switch
+        {
+            "neon" => Theme.Neon,
+            "retro" => Theme.Retro,
+            _ => Theme.Dark
+        };
+
+        ThemeService.SetTheme(newTheme);
+        console.MarkupLine($"[green]✓ Theme switched to {newTheme}![/]");
+        console.MarkupLine("[grey]Type /clear to refresh the UI.[/]");
+    }
+
+    // 🔧 Fixed: all cell content is escaped to prevent markup errors
+    private void ShowHelp(IAnsiConsole console)
+    {
+        var table = new Table();
+        table.Border(TableBorder.Rounded);
+        table.BorderColor(ThemeService.PrimaryColor);
+        table.Title = new TableTitle(" COMMANDS ", new Style(ThemeService.PrimaryColor));
+
+        table.AddColumn(new TableColumn("Command").Centered().NoWrap());
+        table.AddColumn(new TableColumn("Description").NoWrap());
+
+        // Escape every string to ensure no markup is parsed
+        table.AddRow(Markup.Escape("/menu"), Markup.Escape("Interactive navigation menu"))
+             .AddRow(Markup.Escape("/stats"), Markup.Escape("Developer RPG stats sheet"))
+             .AddRow(Markup.Escape("/matrix"), Markup.Escape("Digital rain animation"))
+             .AddRow(Markup.Escape("/game"), Markup.Escape("Developer trivia game"))
+             .AddRow(Markup.Escape("/theme [dark|neon|retro]"), Markup.Escape("Change UI theme"))
+             .AddRow(Markup.Escape("/clear"), Markup.Escape("Clear screen"))
+             .AddRow(Markup.Escape("/exit"), Markup.Escape("Logout"));
+
+        console.Write(table);
     }
 }

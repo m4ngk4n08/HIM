@@ -14,16 +14,18 @@ services:
       - AiSettings__KnowledgeBase__FilePath=knowledge-base.json
       - AiSettings__KnowledgeBase__CacheFile=cache/knowledge-base.embeddings.bin
       - AiSettings__KnowledgeBase__MemoryCollectionName=angelo-kb
+      - LOG_PATH=/app/Logs/ai-log-.json
     ports:
-      - "127.0.0.1:8080:8080" #ONLY expose to VPS local loopback
+      - "127.0.0.1:8080:8080"   # internal only
     volumes:
       - ./cache:/app/cache
       - ./knowledge-base.json:/app/knowledge-base.json
+      - /var/log/him:/app/Logs   # <--- host directory mount
 
   him-gateway:
     image: ghcr.io/m4ngk4n08/him-gateway:latest
     ports:
-      - "22:22" # <--- Now binds VPS standard SSH port 22 to internal port 22
+      - "22:22"
     environment:
       - SshSettings__Port=22
       - AiServiceSettings__BaseUrl=http://127.0.0.1:8080
@@ -31,8 +33,11 @@ services:
       - DOTNET_SYSTEM_CONSOLE_ALLOW_ANSI_COLOR_REDIRECTION=true
       - LANG=en_US.UTF-8
       - LC_ALL=en_US.UTF-8
+      # ----- Logging (new) -----
+      - LOG_PATH=/app/Logs/gateway-log-.json
     volumes:
-      - ./keys:/app/keys # Persist hostkeys on the vps host machine
+      - ./keys:/app/keys
+      - /var/log/him:/app/Logs   # <--- same host directory
     depends_on:
       - him-ai
     restart: always

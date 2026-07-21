@@ -20,17 +20,23 @@ namespace HIM.Gateway.Services.SSH
             _httpClient = httpClient;
             _settings = settings.Value;
         }
-        public async IAsyncEnumerable<string> GetAiResponseAsync(string question, CancellationToken ct)
+        public async IAsyncEnumerable<string> GetAiResponseAsync(string question, CancellationToken ct, string? correlationId = null)
         {
             // Prepare the request
             var request = new { Question = question };
 
             // Call the AI Microservice
-            using var response = await _httpClient.PostAsJsonAsync(
-                $"{_settings.BaseUrl}/api/chat/ask",
-                request,
-                ct
-                );
+            using var httpRequest = new HttpRequestMessage(
+                HttpMethod.Post,
+                $"{_settings.BaseUrl}/api/chat/ask")
+            {
+                Content = JsonContent.Create(request)
+            };
+
+            if (!string.IsNullOrEmpty(correlationId))
+                httpRequest.Headers.Add("X-Request-Id", correlationId);
+
+            using var response = await _httpClient.SendAsync(httpRequest, ct);
 
             if (!response.IsSuccessStatusCode)
             {

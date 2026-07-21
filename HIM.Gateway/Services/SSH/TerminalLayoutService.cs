@@ -2,65 +2,119 @@ using HIM.Gateway.Services.SSH.Interfaces;
 using HIM.Gateway.Services.SSH.Interfaces.ICommandDispatcher;
 using Spectre.Console;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 
-namespace HIM.Gateway.Services.SSH
+namespace HIM.Gateway.Services.SSH;
+
+public class TerminalLayoutService : ITerminalLayoutService
 {
-    public class TerminalLayoutService(ICommandDispatcherHelper commandDispatcher) : ITerminalLayoutService
+    private readonly ICommandDispatcherHelper _commandDispatcher;
+    private readonly string[] _funFacts = new[]
     {
-        private readonly ICommandDispatcherHelper _commandDispatcher = commandDispatcher;
+        "🚀 Running on a $4/month VPS",
+        "🧠 Powered by ONNX + Groq LPU",
+        "⚡ SIMD‑accelerated vector search",
+        "🔒 Hardened with nftables + Fail2Ban",
+        "💻 Built with .NET 10 & C#",
+        "🎮 TUI Game Engine built-in",
+        "🌐 80% cost reduction vs Python RAG",
+        "📦 Native AOT ready (Project Loom)",
+        "🧬 All‑in‑process embedding pipeline",
+        "🔐 Zero external API calls for embeddings"
+    };
+    private int _funFactIndex = 0;
 
-        public async Task InitializeTerminalLayoutAsync(IAnsiConsole console, Stream stream, CancellationToken ct)
+    public TerminalLayoutService(ICommandDispatcherHelper commandDispatcher)
+    {
+        _commandDispatcher = commandDispatcher;
+    }
+
+    public async Task InitializeTerminalLayoutAsync(IAnsiConsole console, Stream stream, CancellationToken ct)
+    {
+        // 1. Reset terminal and clear
+        await stream.WriteAsync(Encoding.UTF8.GetBytes("\x1b[2J\x1b[H"), ct);
+        console.Clear();
+
+        // 2. Render all static parts and track line count
+        int lineCount = 0;
+
+        // Header (panel + tagline)
+        RenderHeader(console);
+        lineCount += GetHeaderLineCount(console);
+        console.WriteLine();
+        lineCount++;
+
+        // Status bar
+        RenderStatusBar(console);
+        lineCount++;
+        console.WriteLine();
+        lineCount++;
+
+        // Welcome
+        console.MarkupLine($"[{ThemeService.PrimaryColor}]Welcome to Angelo's Portfolio.[/] [grey](SSH Edition)[/]");
+        lineCount++;
+        console.MarkupLine("[grey]Type [yellow]/help[/] for command list or start chatting with the AI.[/]");
+        lineCount++;
+        console.WriteLine();
+        lineCount++;
+
+        // Footer
+        RenderFooter(console);
+        lineCount++;
+        console.WriteLine();
+        lineCount++;
+
+        // 3. The first line of the scrolling region is the next line (1‑based)
+        int firstScrollLine = lineCount + 1;
+
+        // Clamp to terminal height
+        if (firstScrollLine > console.Profile.Height)
+            firstScrollLine = console.Profile.Height;
+
+        // 4. Set scrolling region from firstScrollLine to bottom
+        await _commandDispatcher.SetScrollingRegionAsync(stream, firstScrollLine, console.Profile.Height, ct);
+
+        // 5. Move cursor to the start of the scrolling region
+        await _commandDispatcher.MoveCursorAsync(stream, firstScrollLine, 1, ct);
+    }
+
+    private void RenderHeader(IAnsiConsole console)
+    {
+        var figlet = new FigletText("H I M")
+            .Centered()
+            .Color(ThemeService.PrimaryColor);
+
+        var panel = new Panel(figlet)
         {
-            // 1. Reset Terminal and clear
-            await stream.WriteAsync(Encoding.UTF8.GetBytes("\x1b[2J\x1b[H"), ct);
-            console.Clear();
+            Header = new PanelHeader($"[{ThemeService.AccentColor}] Heuristic Interactive Mockup [/]", Justify.Center),
+            Border = BoxBorder.Rounded,
+            BorderStyle = new Style(ThemeService.PrimaryColor)
+        };
+        console.Write(panel);
 
-            // 2. Render the Fixed Header
-            RenderHeader(console);
-            console.Write(new Rule("[yellow]HEURISTIC INTERACTIVE MOCKUP[/]").Centered());
+        console.MarkupLine($"[grey]▸ [/][italic {ThemeService.SecondaryColor}]\"For a better experience, resize your window (Ctrl+- / Cmd+-).\"[/]");
+    }
 
-            // 3. Set the Scrolling Region (Line Top+1 to Bottom)
-            int top = GetHeaderHeight(console.Profile.Width, console.Profile.Height);
-            await _commandDispatcher.SetScrollingRegionAsync(stream, top + 1, console.Profile.Height, ct);
+    private void RenderStatusBar(IAnsiConsole console)
+    {
+        var model = "llama3.3‑70b (Groq)";
+        var theme = ThemeService.CurrentTheme.ToString().ToUpper();
 
-            // 4. Move Cursor to the start of the Scrolling Zone
-            await _commandDispatcher.MoveCursorAsync(stream, top + 1, 1, ct);
+        var status = $"[{ThemeService.PrimaryColor}]●[/] MODEL: [white]{model}[/]  |  [{ThemeService.SecondaryColor}]▓[/] THEME: [white]{theme}[/]  |  [{ThemeService.AccentColor}]♢[/] SSH: [white]ACTIVE[/]";
+        console.MarkupLine(status);
+    }
 
-            console.MarkupLine("[bold white]Welcome to Angelo's Portfolio.[/] [grey](SSH Edition)[/]");
-            console.MarkupLine("[grey]Type [white]/help[/] for command list or start chatting with the AI.[/]");
-            console.WriteLine();
-        }
+    private void RenderFooter(IAnsiConsole console)
+    {
+        var fact = _funFacts[_funFactIndex % _funFacts.Length];
+        _funFactIndex++;
+        console.MarkupLine($"[grey]──[/] {fact} [grey]──[/]");
+    }
 
-        private int GetHeaderHeight(int terminalWidth, int terminalHeight)
-        {
-            // If the terminal height is too short, force a compact header height (3 lines)
-            // so we don't choke the scrolling region.
-            if (terminalHeight < 28)
-            {
-                return 3;
-            }
-
-            return (terminalWidth > 60) ? 8 : 3;
-        }
-
-        private void RenderHeader(IAnsiConsole console)
-        {
-            // Use Figlet only if both terminal width and height are large enough
-            if (console.Profile.Width >= 60 && console.Profile.Height >= 28)
-            {
-                console.Write(
-                    new FigletText("H I M")
-                        .Centered()
-                        .Color(Color.Cyan1));
-            }
-            else
-            {
-                console.Write(
-                    new Text("--- H I M ---", new Style(Color.Cyan1, decoration: Decoration.Bold))
-                    .Centered());
-            }
-        }
+    private int GetHeaderLineCount(IAnsiConsole console)
+    {
+        // Estimate lines: Figlet panel (varies) + tagline (1)
+        // Figlet panel: ~5-6 lines depending on width, plus padding.
+        // Conservative estimate.
+        return console.Profile.Width > 60 ? 8 : 5;
     }
 }

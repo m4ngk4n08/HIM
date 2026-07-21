@@ -241,22 +241,27 @@ namespace HIM.Gateway.Services.SSH
         {
             console.Write("\x1b]0;a11s.exe\x07");
 
+            // Add a gradient title before the spinner
+            console.Write(new FigletText("INITIALIZING")
+                .Centered()
+                .Color(ThemeService.PrimaryColor));
+            console.WriteLine();
 
             await console.Status()
                 .Spinner(Spinner.Known.Dots)
                 .StartAsync("Initializing Neural Gateway...", async ctx =>
                 {
-                    await Task.Delay(500, ct);
+                    await Task.Delay(200, ct);
                     ctx.Status("Retrieving Portfolio Knowledge Base...");
-                    await Task.Delay(500, ct);
-                    ctx.Status("Utilizing memory management...");
-                    await Task.Delay(500, ct);
+                    await Task.Delay(200, ct);
+                    ctx.Status("For a better experience, resize your window (Ctrl+- / Cmd+-).");
+                    await Task.Delay(3000, ct);
                     ctx.Status("Utilizing GC..");
-                    await Task.Delay(500, ct);
+                    await Task.Delay(200, ct);
                     ctx.Status("Settings up sandbox...");
-                    await Task.Delay(500, ct);
+                    await Task.Delay(200, ct);
                     ctx.Status("Retrieving Portfolio Knowledge Base...");
-                    await Task.Delay(500, ct);
+                    await Task.Delay(200, ct);
                     ctx.Status("Access Granted.");
                 });
 
