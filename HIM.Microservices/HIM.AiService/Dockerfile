@@ -10,9 +10,8 @@ RUN dotnet publish "HIM.AiService.csproj" -c Release -o /app/publish
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 
-# Create non‑root user (UID 1000)
-RUN /usr/sbin/groupadd -g 1000 himgroup && \
-    /usr/sbin/useradd -u 1000 -g himgroup -m -d /home/himuser -s /sbin/nologin himuser
+# Ensure the /app directory is owned by the existing 'app' user (UID 1000)
+RUN chown -R app:app /app
 
 # Copy the published app
 COPY --from=build /app/publish .
