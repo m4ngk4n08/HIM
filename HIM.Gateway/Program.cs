@@ -16,6 +16,14 @@ using Serilog.Formatting.Compact;
 var builder = Host.CreateApplicationBuilder(args);
 var logDir = Path.Combine(AppContext.BaseDirectory, "Logs");
 var logPath = Path.Combine(logDir, "gateway-log-.json");
+
+if (string.IsNullOrEmpty(logPath))
+{
+    logPath = builder.Environment.IsDevelopment()
+        ? Path.Combine(AppContext.BaseDirectory, "Logs", "gateway-log-.json")
+        : "/var/log/him/gateway-log-.json";
+}
+
 // In development, delete old log files to start fresh
 if (builder.Environment.IsDevelopment())
 {
