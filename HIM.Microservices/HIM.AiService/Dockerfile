@@ -10,9 +10,6 @@ RUN dotnet publish "HIM.AiService.csproj" -c Release -o /app/publish
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 
-# Ensure the /app directory is owned by the existing 'app' user (UID 1000)
-RUN chown -R app:app /app
-
 # Copy the published app
 COPY --from=build /app/publish .
 
@@ -20,13 +17,11 @@ COPY --from=build /app/publish .
 COPY knowledge-base.json .
 COPY Models/ ./Models/
 
-# Ensure the entire /app directory is owned by the new user
-RUN chown -R himuser:himgroup /app
+# Ensure /app is owned by the existing 'app' user (UID 1000)
+RUN chown -R app:app /app
 
-# Switch to the non‑root user
-USER himuser
+# Switch to the non‑root user 'app'
+USER app
 
-# Expose the API port
 EXPOSE 8080
-
 ENTRYPOINT [ "dotnet", "HIM.AiService.dll" ]

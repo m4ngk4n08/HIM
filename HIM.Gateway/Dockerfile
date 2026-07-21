@@ -10,13 +10,14 @@ RUN dotnet publish "HIM.Gateway.csproj" -c Release -o /app/publish
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 
-# Ensure the /app directory is owned by the existing 'app' user (UID 1000)
+# Copy the published app
+COPY --from=build /app/publish .
+
+# Ensure /app is owned by the existing 'app' user (UID 1000)
 RUN chown -R app:app /app
 
-COPY --from=build /app/publish .
-RUN chown -R himuser:himgroup /app
-
-USER himuser
+# Switch to the non‑root user 'app'
+USER app
 
 EXPOSE 22
 ENTRYPOINT [ "dotnet", "HIM.Gateway.dll" ]
