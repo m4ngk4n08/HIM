@@ -10,21 +10,14 @@ RUN dotnet publish "HIM.Gateway.csproj" -c Release -o /app/publish
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 
-# Create a non‑root user and group (UID/GID 1000)
-# Use full paths to avoid "command not found" errors
-RUN /usr/sbin/addgroup --gid 1000 himgroup && \
-    /usr/sbin/adduser --uid 1000 --gid 1000 --disabled-password --gecos "" himuser
+# Create non‑root user (UID 1000)
+RUN /usr/sbin/groupadd -g 1000 himgroup && \
+    /usr/sbin/useradd -u 1000 -g himgroup -m -d /home/himuser -s /sbin/nologin himuser
 
-# Copy the published app
 COPY --from=build /app/publish .
-
-# Ensure the entire /app directory is owned by the new user
 RUN chown -R himuser:himgroup /app
 
-# Switch to the non‑root user
 USER himuser
 
-# Expose the SSH port
 EXPOSE 22
-
 ENTRYPOINT [ "dotnet", "HIM.Gateway.dll" ]
