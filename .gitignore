@@ -53,3 +53,13 @@ artifacts/
 /HIM.Gateway/Models/Tour/TourSession.cs
 /HIM.Gateway/Models/Tour/TourStep.cs
 /HIM.Gateway/Models/Tour/TourTable.cs
+
+# Cryptographic material — NEVER commit
+hostkey.json
+*.pem
+*.key
+keys/
+
+# Build/runtime artifacts
+build.log
+game-scores.json
