@@ -5,6 +5,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/HIM.AiService.Tests/HIM.AiService.Tests.csproj" />
+    <Project Path="tests/HIM.Gateway.Tests/HIM.Gateway.Tests.csproj" />
   </Folder>
   <Project Path="HIM.Gateway/HIM.Gateway.csproj" />
 </Solution>

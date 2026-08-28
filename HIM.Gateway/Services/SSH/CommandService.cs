@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using HIM.Gateway.Extensions;
@@ -28,15 +27,8 @@ public class CommandService : ICommandService
     private readonly ITerminalLayoutService _terminalLayoutService;
     private readonly ILogger<CommandService> _logger;
     private readonly KnowledgeBaseSettings _kbSettings;
+    private readonly UserSessionState _sessionState;
     private readonly TimeSpan _cooldownDuration = TimeSpan.FromSeconds(3);
-
-    private readonly ConditionalWeakTable<IAnsiConsole, UserSessionState> _sessionStates = new();
-
-    private class UserSessionState
-    {
-        public DateTime LastQuery { get; set; }
-        public string SessionId { get; } = Guid.NewGuid().ToString();
-    }
 
     public CommandService(
         IAiClientService aiClientService,
@@ -47,7 +39,8 @@ public class CommandService : ICommandService
         ICommandDispatcherHelper commandDispatcherHelper,
         ITerminalLayoutService terminalLayoutService,
         ILogger<CommandService> logger,
-        IOptions<KnowledgeBaseSettings> kbSettings)
+        IOptions<KnowledgeBaseSettings> kbSettings,
+        UserSessionState sessionState)
     {
         _kbSettings = kbSettings.Value;
         _aiClientService = aiClientService;
@@ -58,6 +51,7 @@ public class CommandService : ICommandService
         _commandDispatcherHelper = commandDispatcherHelper;
         _terminalLayoutService = terminalLayoutService;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _sessionState = sessionState;
         LoadKnowledgeBase();
     }
 
@@ -92,8 +86,7 @@ public class CommandService : ICommandService
     {
         if (string.IsNullOrWhiteSpace(command)) return;
 
-        var sessionState = _sessionStates.GetOrCreateValue(console);
-        var sessionId = sessionState.SessionId;
+        var sessionId = _sessionState.SessionId;
 
         var safeCommand = SanitizerExtension.Redact(command);
         LogWithSession(sessionId, LogLevel.Information, "Command received: {Command}", safeCommand);
@@ -145,7 +138,7 @@ public class CommandService : ICommandService
                         break;
                     }
 
-                    if (IsRateLimited(sessionState))
+                    if (IsRateLimited(_sessionState))
                     {
                         console.MarkupLine($"[yellow]![/] [grey]{Markup.Escape("Neural Link is cooling down.. please wait")}[/]");
                         break;

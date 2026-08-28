@@ -5,6 +5,7 @@ using HIM.Gateway.Models;
 using HIM.Gateway.Services.SSH.Interfaces;
 using Microsoft.DevTunnels.Ssh;
 using Microsoft.DevTunnels.Ssh.Messages;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Collections.Concurrent;
@@ -37,7 +38,10 @@ namespace HIM.Gateway.Services.SSH
         private const int MaxConcurrentTarpits = 100; // Hard cap to prevent Thread Pool exhaustion
 
         // ── Injected Dependencies ─────────────────────────────────────────
-        private readonly ITuiEngine _tuiEngine;
+        // ITuiEngine is intentionally NOT injected here: it (and everything it depends on)
+        // is Scoped per session, and this listener is a Singleton. A scope is created per
+        // shell channel in HandleShellChannelAsync and ITuiEngine is resolved from it there.
+        private readonly IServiceScopeFactory _serviceScopeFactory;
         private readonly IHostKeyService _hostKeyService;
         private readonly IAuthenticationService _authenticationService;
         private readonly IIpBanService _ipBanService;
@@ -71,14 +75,14 @@ namespace HIM.Gateway.Services.SSH
         // ── Constructor ───────────────────────────────────────────────────
 
         public SshServerListener(
-            ITuiEngine tuiEngine,
+            IServiceScopeFactory serviceScopeFactory,
             IHostKeyService hostKeyService,
             IAuthenticationService authenticationService,
             IIpBanService ipBanService,
             ILogger<SshServerListener> logger,
             IOptions<SshSettings> settings)
         {
-            _tuiEngine = tuiEngine;
+            _serviceScopeFactory = serviceScopeFactory;
             _hostKeyService = hostKeyService;
             _authenticationService = authenticationService;
             _ipBanService = ipBanService;
@@ -503,8 +507,7 @@ namespace HIM.Gateway.Services.SSH
 
                         if (!channelCts.IsCancellationRequested)  // <-- guard
                         {
-                            _ = Task.Run(() => _tuiEngine.RunAsync(
-                                channel, terminalWidth, terminalHeight, channelCts.Token));
+                            _ = Task.Run(() => RunTuiInScopeAsync(channel, terminalWidth, terminalHeight, channelCts.Token));
                         }
                         break;
 
@@ -541,6 +544,19 @@ namespace HIM.Gateway.Services.SSH
                         break;
                 }
             };
+        }
+
+        /// <summary>
+        /// Creates one DI scope per shell channel so every per-session service (TUI engine,
+        /// command service, game state, etc.) gets its own instance instead of sharing the
+        /// process-wide singleton graph. The scope is torn down when the TUI run completes,
+        /// on exception, and on cancellation — "await using" guarantees disposal on all three.
+        /// </summary>
+        private async Task RunTuiInScopeAsync(SshChannel channel, uint width, uint height, CancellationToken ct)
+        {
+            await using var scope = _serviceScopeFactory.CreateAsyncScope();
+            var tuiEngine = scope.ServiceProvider.GetRequiredService<ITuiEngine>();
+            await tuiEngine.RunAsync(channel, width, height, ct);
         }
 
         // ── Private Utilities ─────────────────────────────────────────────
