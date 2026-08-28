@@ -1,6 +1,7 @@
 ﻿using HIM.AiService.Models;
 using HIM.AiService.Services.AI.Interface;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace HIM.AiService.Controllers
 {
@@ -18,27 +19,6 @@ namespace HIM.AiService.Controllers
             _ragService = ragService ?? throw new ArgumentNullException(nameof(ragService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
-        
-        /// <summary>
-        /// Refreshes and re-indexes the knoweledge base vectors.
-        /// </summary>
-        [HttpPost("initialize")]
-        public async Task<IActionResult> Initialize()
-        {
-            try
-            {
-                _logger.LogInformation("Initializing knoweldge base..");
-                
-                await _ragService.InitializeAsync();
-
-                return Ok(new { Message = "Knowledge base indexed successfully." });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to initialize knowledge base");
-                return StatusCode(500, ex.Message);
-            }
-        }
 
         /// <summary>
         /// Process a portfolio inquiry and streams the AI's response in real-time
@@ -46,6 +26,7 @@ namespace HIM.AiService.Controllers
         /// <param name="request">The user's question.</param>
         /// <param name="ct">Signals if the client has disconnected.</param>
         [HttpPost("ask")]
+        [EnableRateLimiting("ChatAsk")]
         public IAsyncEnumerable<string> Ask([FromBody] ChatRequest request, CancellationToken ct)
         {
             if (string.IsNullOrWhiteSpace(request.Question))

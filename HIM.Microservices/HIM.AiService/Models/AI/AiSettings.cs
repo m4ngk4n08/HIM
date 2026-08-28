@@ -8,5 +8,7 @@
         public GeminiSettings Gemini { get; set; } = new();
         public KnowledgeBaseSettings KnowledgeBase { get; set; } = new();
         public Onnx Onnx { get; set; } = new();
+        public SecuritySettings Security { get; set; } = new();
+        public RateLimitSettings RateLimit { get; set; } = new();
     }
 }

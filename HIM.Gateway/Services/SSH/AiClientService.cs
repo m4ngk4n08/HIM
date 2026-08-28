@@ -36,6 +36,8 @@ namespace HIM.Gateway.Services.SSH
             if (!string.IsNullOrEmpty(correlationId))
                 httpRequest.Headers.Add("X-Request-Id", correlationId);
 
+            httpRequest.Headers.Add("X-Ai-Shared-Secret", _settings.SharedSecret);
+
             using var response = await _httpClient.SendAsync(httpRequest, ct);
 
             if (!response.IsSuccessStatusCode)

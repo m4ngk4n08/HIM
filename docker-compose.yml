@@ -4,6 +4,7 @@ services:
     restart: always
     environment:
       - AiSettings__ChatProvider=Groq
+      - AiSettings__Security__SharedSecret=${AI_SHARED_SECRET}
       - AiSettings__Groq__ApiKey=${GROQ_API_KEY}
       - AiSettings__Groq__ModelId=llama-3.3-70b-versatile
       - AiSettings__Groq__Endpoint=https://api.groq.com/openai/v1
@@ -29,6 +30,7 @@ services:
     environment:
       - SshSettings__Port=22
       - AiServiceSettings__BaseUrl=http://127.0.0.1:8080
+      - AiServiceSettings__SharedSecret=${AI_SHARED_SECRET}
       - TERM=xterm-256color
       - DOTNET_SYSTEM_CONSOLE_ALLOW_ANSI_COLOR_REDIRECTION=true
       - LANG=en_US.UTF-8

@@ -1,68 +1,167 @@
-﻿using HIM.AiService.Models.AI;
+using HIM.AiService.Models.AI;
 using HIM.AiService.Services.AI.Interface;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Security.Cryptography;
 using System.Text.Json;
-using System.Xml.Linq;
 
 namespace HIM.AiService.Services.AI
 {
     public class KnowledgeBaseService : IKnowledgeBaseService
     {
+        // Distinguishes the header-carrying cache format from the legacy headerless one
+        // (whose first 4 bytes are just a chunk count). Never migrate a headerless file.
+        private const int CacheMagic = unchecked((int)0xDEC0DE01);
+        private const int CacheSchemaVersion = 1;
+
         private readonly List<KnowledgeChunks> _chunks = new();
         private readonly IEmbeddingService _embeddingService;
         private readonly IVectorSearchService _vectorsearchService;
         private readonly AiSettings _settings;
+        private readonly ILogger<KnowledgeBaseService> _logger;
 
         public KnowledgeBaseService(
             IEmbeddingService embeddingService,
             IVectorSearchService vectorsearchService,
-            IOptions<AiSettings> settings)
+            IOptions<AiSettings> settings,
+            ILogger<KnowledgeBaseService> logger)
         {
             _embeddingService = embeddingService;
             _vectorsearchService = vectorsearchService;
             _settings = settings.Value;
+            _logger = logger;
         }
 
         public async Task InitializeAsync()
         {
             if (_chunks.Any()) return;
 
-            // Try load from Binary Cache(instant)
-            if(File.Exists(_settings.KnowledgeBase.CacheFile))
+            var sourceBytes = await File.ReadAllBytesAsync(_settings.KnowledgeBase.FilePath);
+            var sourceHash = ComputeHash(sourceBytes);
+
+            if (await TryLoadCacheAsync(sourceHash))
             {
-                await LoadCacheAsync();
+                _logger.LogInformation(
+                    "Knowledge base loaded from cache '{CacheFile}' ({Count} chunks).",
+                    _settings.KnowledgeBase.CacheFile, _chunks.Count);
                 return;
             }
 
-            // Cold Start: Process JSON
-            var json = await File.ReadAllTextAsync(_settings.KnowledgeBase.FilePath);
-            using var doc = JsonDocument.Parse(json);
+            _chunks.Clear();
+
+            using var doc = JsonDocument.Parse(sourceBytes);
             var rawChunks = new List<string>();
             FlattenJson(doc.RootElement, string.Empty, rawChunks);
 
-            foreach(var text in rawChunks)
+            foreach (var text in rawChunks)
             {
                 var vector = await _embeddingService.GetNormalizeLocalEmbeddingAsync(text);
                 _chunks.Add(new KnowledgeChunks { Text = text, Vector = vector });
             }
 
-            // Save for next time
-            await SaveCacheAsync();
+            await SaveCacheAsync(sourceHash);
 
+            _logger.LogInformation(
+                "Knowledge base rebuilt from source '{SourceFile}' and cached to '{CacheFile}' ({Count} chunks).",
+                _settings.KnowledgeBase.FilePath, _settings.KnowledgeBase.CacheFile, _chunks.Count);
         }
 
-        private async Task SaveCacheAsync()
+        private static byte[] ComputeHash(byte[] bytes) => SHA256.HashData(bytes);
+
+        /// <summary>
+        /// Attempts to load and validate the binary cache against the current source hash.
+        /// Returns false (cache miss) on a missing file, a mismatched magic/version/hash,
+        /// or any read failure - a corrupt cache must never throw at startup.
+        /// </summary>
+        private async Task<bool> TryLoadCacheAsync(byte[] expectedHash)
         {
+            var cacheFile = _settings.KnowledgeBase.CacheFile;
+
+            if (!File.Exists(cacheFile))
+            {
+                _logger.LogInformation("No cache file found at '{CacheFile}'; rebuilding.", cacheFile);
+                return false;
+            }
+
+            try
+            {
+                using var stream = File.OpenRead(cacheFile);
+                using var reader = new BinaryReader(stream);
+
+                var magic = reader.ReadInt32();
+                if (magic != CacheMagic)
+                {
+                    _logger.LogInformation("Cache file '{CacheFile}' has no valid header; rebuilding.", cacheFile);
+                    return false;
+                }
+
+                var version = reader.ReadInt32();
+                if (version != CacheSchemaVersion)
+                {
+                    _logger.LogInformation(
+                        "Cache schema version mismatch (found {Found}, expected {Expected}); rebuilding.",
+                        version, CacheSchemaVersion);
+                    return false;
+                }
+
+                var hashLength = reader.ReadInt32();
+                var hash = reader.ReadBytes(hashLength);
+                if (hashLength != expectedHash.Length || !hash.AsSpan().SequenceEqual(expectedHash))
+                {
+                    _logger.LogInformation(
+                        "Cache hash does not match source '{SourceFile}'; rebuilding.",
+                        _settings.KnowledgeBase.FilePath);
+                    return false;
+                }
+
+                var loaded = new List<KnowledgeChunks>();
+                var count = reader.ReadInt32();
+                for (int i = 0; i < count; i++)
+                {
+                    var text = reader.ReadString();
+                    var vecLen = reader.ReadInt32();
+                    var vec = new float[vecLen];
+                    for (int j = 0; j < vecLen; j++)
+                        vec[j] = reader.ReadSingle();
+
+                    loaded.Add(new KnowledgeChunks { Text = text, Vector = vec });
+                }
+
+                _chunks.AddRange(loaded);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Cache file '{CacheFile}' is corrupt; rebuilding.", cacheFile);
+                _chunks.Clear();
+                return false;
+            }
+        }
+
+        private async Task SaveCacheAsync(byte[] sourceHash)
+        {
+            var cacheDir = Path.GetDirectoryName(_settings.KnowledgeBase.CacheFile);
+            if (!string.IsNullOrEmpty(cacheDir))
+                Directory.CreateDirectory(cacheDir);
+
             using var stream = File.Create(_settings.KnowledgeBase.CacheFile);
             using var writer = new BinaryWriter(stream);
+
+            writer.Write(CacheMagic);
+            writer.Write(CacheSchemaVersion);
+            writer.Write(sourceHash.Length);
+            writer.Write(sourceHash);
+
             writer.Write(_chunks.Count);
-            foreach(var chunk in _chunks)
+            foreach (var chunk in _chunks)
             {
                 writer.Write(chunk.Text);
                 writer.Write(chunk.Vector.Length);
                 foreach (var val in chunk.Vector)
                     writer.Write(val);
             }
+
+            await stream.FlushAsync();
         }
 
         private void FlattenJson(JsonElement element, string prefix, List<string> chunks)
@@ -122,23 +221,6 @@ namespace HIM.AiService.Services.AI
                     string val = element.ToString();
                     if (!string.IsNullOrWhiteSpace(val)) chunks.Add($"{prefix}: {val}");
                     break;
-            }
-        }
-
-        private async Task LoadCacheAsync()
-        {
-            using var stream = File.OpenRead(_settings.KnowledgeBase.CacheFile);
-            using var reader = new BinaryReader(stream);
-            int count = reader.ReadInt32();
-            for(int i = 0; i < count; i++)
-            {
-                var text = reader.ReadString();
-                int vecLen = reader.ReadInt32();
-                var vec = new float[vecLen];
-                for (int j = 0; j < vecLen; j++)
-                    vec[j] = reader.ReadSingle();
-
-                _chunks.Add(new KnowledgeChunks { Text = text, Vector = vec });
             }
         }
 
