@@ -1,4 +1,4 @@
-using HIM.AiService.Extenstions;
+using HIM.AiService.Extensions;
 using HIM.AiService.Models.AI;
 using HIM.AiService.Security;
 using HIM.AiService.Services.AI.Interface;

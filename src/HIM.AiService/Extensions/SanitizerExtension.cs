@@ -2,7 +2,7 @@
 
 namespace HIM.AiService.Extensions
 {
-    public static class SantirizerExtension
+    public static class SanitizerExtension
     {
         private static readonly Regex EmailRegex = new(
         @"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b",

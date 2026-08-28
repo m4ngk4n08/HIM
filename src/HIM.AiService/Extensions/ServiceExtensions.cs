@@ -1,9 +1,8 @@
-﻿using HIM.AiService.Extensions;
-using HIM.AiService.Services;
+﻿using HIM.AiService.Services;
 using HIM.AiService.Services.AI;
 using HIM.AiService.Services.AI.Interface;
 
-namespace HIM.AiService.Extenstions
+namespace HIM.AiService.Extensions
 {
     public static class ServiceExtensions
     {

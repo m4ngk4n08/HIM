@@ -8,7 +8,7 @@ Write-Host "[1/3] Cleaning up old environment..." -ForegroundColor Yellow
 docker-compose down -v
 
 # delete the cache file:
-Remove-Item -Path "HIM.Microservices/HIM.AiService/knowledge-base.embeddings.bin" -Force -ErrorAction SilentlyContinue
+Remove-Item -Path "src/HIM.AiService/knowledge-base.embeddings.bin" -Force -ErrorAction SilentlyContinue
 
 #clear the old local known host key:
 ssh-keygen -R '[localhost:2222]'

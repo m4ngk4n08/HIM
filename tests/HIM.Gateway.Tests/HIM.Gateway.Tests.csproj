@@ -21,7 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\HIM.Gateway\HIM.Gateway.csproj" />
+    <ProjectReference Include="..\..\src\HIM.Gateway\HIM.Gateway.csproj" />
   </ItemGroup>
 
 </Project>

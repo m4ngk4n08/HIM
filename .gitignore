@@ -36,7 +36,12 @@ bld/
 appsettings.json
 appsettings.Development.json
 *.secrets.json
-HIM.Microservices/HIM.AiService/knowledge-base.json
+src/HIM.AiService/knowledge-base.json
+
+# Docker bind-mounts ./knowledge-base.json (repo root) into the AI service container;
+# when that host file doesn't exist, Docker silently creates an empty directory here,
+# which then shadows the knowledge-base.json baked into the image. See Task 02 notes.
+/knowledge-base.json
 
 # .NET Core
 project.lock.json
@@ -47,12 +52,12 @@ artifacts/
 .gemini/
 .aider*
 /plans/
-/HIM.Gateway/Models/Tour/Enums/TourMode.cs
-/HIM.Gateway/Models/Tour/Enums/TourNavigationAction.cs
-/HIM.Gateway/Models/Tour/TourCommandResult.cs
-/HIM.Gateway/Models/Tour/TourSession.cs
-/HIM.Gateway/Models/Tour/TourStep.cs
-/HIM.Gateway/Models/Tour/TourTable.cs
+/src/HIM.Gateway/Models/Tour/Enums/TourMode.cs
+/src/HIM.Gateway/Models/Tour/Enums/TourNavigationAction.cs
+/src/HIM.Gateway/Models/Tour/TourCommandResult.cs
+/src/HIM.Gateway/Models/Tour/TourSession.cs
+/src/HIM.Gateway/Models/Tour/TourStep.cs
+/src/HIM.Gateway/Models/Tour/TourTable.cs
 
 # Cryptographic material — NEVER commit
 hostkey.json

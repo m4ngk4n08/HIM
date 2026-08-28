@@ -30,7 +30,7 @@ jobs:
             - name: Build and Push AI Service
               uses: docker/build-push-action@v5
               with:
-                context: ./HIM.Microservices/HIM.AiService
+                context: ./src/HIM.AiService
                 push: true
                 tags: ${{ env.REGISTRY }}/${{ env.AI_IMAGE }}:latest
 
@@ -38,7 +38,7 @@ jobs:
             - name: Build and Push Gateway
               uses: docker/build-push-action@v5
               with:
-                context: ./HIM.Gateway
+                context: ./src/HIM.Gateway
                 push: true
                 tags: ${{ env.REGISTRY }}/${{ env.GATEWAY_IMAGE }}:latest
         

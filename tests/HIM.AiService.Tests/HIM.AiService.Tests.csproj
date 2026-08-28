@@ -21,7 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\HIM.Microservices\HIM.AiService\HIM.AiService.csproj" />
+    <ProjectReference Include="..\..\src\HIM.AiService\HIM.AiService.csproj" />
   </ItemGroup>
 
 </Project>
