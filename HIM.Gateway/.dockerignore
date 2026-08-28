@@ -1,0 +1,33 @@
+# Cryptographic material — must never enter the build context
+hostkey.json
+*.pem
+*.key
+keys/
+
+# Secrets and local configuration
+**/.env
+appsettings.Development.json
+**/*.secrets.json
+
+# Build output and IDE state
+**/bin
+**/obj
+**/.vs
+**/.vscode
+**/*.*proj.user
+**/.git
+**/.gitignore
+**/.dockerignore
+**/Dockerfile*
+**/docker-compose*
+
+# Runtime artifacts
+Logs/
+build.log
+game-scores.json
+cache/
+*.bin
+
+# Docs
+LICENSE
+README.md
