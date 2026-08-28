@@ -1,6 +1,6 @@
 using HIM.AiService.Extenstions;
-using HIM.AiService.Extensions;
 using HIM.AiService.Models.AI;
+using HIM.AiService.Security;
 using HIM.AiService.Services.AI.Interface;
 using Microsoft.Extensions.Options;
 using System.Threading.RateLimiting;
@@ -53,8 +53,12 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.UseHttpsRedirection();
+
+// Cheap check first: reject unauthenticated requests before they can burn rate-limit quota.
+app.UseMiddleware<SharedSecretMiddleware>();
+
 app.UseAuthorization();
 app.UseRateLimiter();
-app.MapControllers().AddControllerEndpointFilter<SharedSecretEndpointFilter>();
+app.MapControllers();
 
 app.Run();

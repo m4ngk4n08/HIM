@@ -8,7 +8,7 @@ service TerminalTunnel {
 	// Bi-directional stream:
 	// Client (Entry) sends TerminalRequest (keys/window)
 	// Server(TUI) sends TerminalResponse (ANSI text)
-	rpc OpenTunnel(stream TerminalRequest) returns (stream TerminalResponse)
+	rpc OpenTunnel(stream TerminalRequest) returns (stream TerminalResponse);
 }
 
 message TerminalRequest {

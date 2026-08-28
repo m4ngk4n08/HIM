@@ -104,9 +104,19 @@ namespace HIM.AiService.Services.AI
                     return false;
                 }
 
+                // Check the length against the expected hash size before reading - never
+                // trust an attacker/corruption-controlled length as an allocation size.
                 var hashLength = reader.ReadInt32();
+                if (hashLength != expectedHash.Length)
+                {
+                    _logger.LogInformation(
+                        "Cache hash does not match source '{SourceFile}'; rebuilding.",
+                        _settings.KnowledgeBase.FilePath);
+                    return false;
+                }
+
                 var hash = reader.ReadBytes(hashLength);
-                if (hashLength != expectedHash.Length || !hash.AsSpan().SequenceEqual(expectedHash))
+                if (!hash.AsSpan().SequenceEqual(expectedHash))
                 {
                     _logger.LogInformation(
                         "Cache hash does not match source '{SourceFile}'; rebuilding.",
@@ -138,30 +148,46 @@ namespace HIM.AiService.Services.AI
             }
         }
 
-        private async Task SaveCacheAsync(byte[] sourceHash)
+        private Task SaveCacheAsync(byte[] sourceHash)
         {
-            var cacheDir = Path.GetDirectoryName(_settings.KnowledgeBase.CacheFile);
+            var cacheFile = _settings.KnowledgeBase.CacheFile;
+            var cacheDir = Path.GetDirectoryName(cacheFile);
             if (!string.IsNullOrEmpty(cacheDir))
                 Directory.CreateDirectory(cacheDir);
 
-            using var stream = File.Create(_settings.KnowledgeBase.CacheFile);
-            using var writer = new BinaryWriter(stream);
-
-            writer.Write(CacheMagic);
-            writer.Write(CacheSchemaVersion);
-            writer.Write(sourceHash.Length);
-            writer.Write(sourceHash);
-
-            writer.Write(_chunks.Count);
-            foreach (var chunk in _chunks)
+            // Write to a temp file and rename into place so a kill mid-write can never
+            // leave a truncated cache file behind (a truncated file rebuilds cleanly anyway,
+            // but there is no reason to leave one around).
+            var tempFile = cacheFile + ".tmp-" + Guid.NewGuid().ToString("N");
+            try
             {
-                writer.Write(chunk.Text);
-                writer.Write(chunk.Vector.Length);
-                foreach (var val in chunk.Vector)
-                    writer.Write(val);
+                using (var stream = File.Create(tempFile))
+                using (var writer = new BinaryWriter(stream))
+                {
+                    writer.Write(CacheMagic);
+                    writer.Write(CacheSchemaVersion);
+                    writer.Write(sourceHash.Length);
+                    writer.Write(sourceHash);
+
+                    writer.Write(_chunks.Count);
+                    foreach (var chunk in _chunks)
+                    {
+                        writer.Write(chunk.Text);
+                        writer.Write(chunk.Vector.Length);
+                        foreach (var val in chunk.Vector)
+                            writer.Write(val);
+                    }
+                }
+
+                File.Move(tempFile, cacheFile, overwrite: true);
+            }
+            finally
+            {
+                if (File.Exists(tempFile))
+                    File.Delete(tempFile);
             }
 
-            await stream.FlushAsync();
+            return Task.CompletedTask;
         }
 
         private void FlattenJson(JsonElement element, string prefix, List<string> chunks)
