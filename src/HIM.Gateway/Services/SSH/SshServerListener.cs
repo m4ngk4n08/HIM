@@ -3,6 +3,7 @@ using HIM.Gateway.Models;
 // via a per-read CancelAfter that resets on every user keystroke. Do NOT add a session-level
 // CancelAfter here — it would fire unconditionally and kill active sessions mid-write.
 using HIM.Gateway.Services.SSH.Interfaces;
+using HIM.Gateway.Services.SSH.Messages;
 using Microsoft.DevTunnels.Ssh;
 using Microsoft.DevTunnels.Ssh.Messages;
 using Microsoft.Extensions.DependencyInjection;
@@ -478,6 +479,13 @@ namespace HIM.Gateway.Services.SSH
             uint terminalWidth = 80;
             uint terminalHeight = 24;
 
+            // Assigned once the "shell" request launches RunTuiInScopeAsync, and read from the
+            // "window-change" handler which may run on a different thread (and may even fire
+            // before "shell" - hence the null-conditional call below). A plain reference write is
+            // atomic but not guaranteed visible across threads without a memory barrier, so both
+            // sides go through Volatile rather than assuming ordering.
+            ITuiEngine? engine = null;
+
             channel.Request += (sender, e) =>
             {
                 switch (e.RequestType)
@@ -494,8 +502,18 @@ namespace HIM.Gateway.Services.SSH
 
                     case "window-change":
                         e.IsAuthorized = true;
-                        _logger.LogDebug("[Gateway] window-change from {User}",
-                            channel.Session.Principal?.Identity?.Name);
+
+                        // "window-change" carries cols/rows/pixel-width/pixel-height with no TERM
+                        // string, unlike "pty-req" - TerminalRequestMessage.ConvertTo would
+                        // misparse it (see WindowChangeMessage's remarks). Verified against the
+                        // installed Microsoft.DevTunnels.Ssh 3.12.29 assembly: it has no dedicated
+                        // window-change message type, so WindowChangeMessage mirrors the RFC 4254
+                        // wire format directly.
+                        var resizeMsg = e.Request.ConvertTo<WindowChangeMessage>();
+                        if (resizeMsg != null)
+                        {
+                            Volatile.Read(ref engine)?.HandleResize(channel, resizeMsg.Columns, resizeMsg.Rows);
+                        }
                         break;
 
                     case "shell":
@@ -507,7 +525,9 @@ namespace HIM.Gateway.Services.SSH
 
                         if (!channelCts.IsCancellationRequested)  // <-- guard
                         {
-                            _ = Task.Run(() => RunTuiInScopeAsync(channel, terminalWidth, terminalHeight, channelCts.Token));
+                            _ = Task.Run(() => RunTuiInScopeAsync(
+                                channel, terminalWidth, terminalHeight, channelCts.Token,
+                                e2 => Volatile.Write(ref engine, e2)));
                         }
                         break;
 
@@ -563,8 +583,20 @@ namespace HIM.Gateway.Services.SSH
         /// command service, game state, etc.) gets its own instance instead of sharing the
         /// process-wide singleton graph.
         /// </summary>
-        private Task RunTuiInScopeAsync(SshChannel channel, uint width, uint height, CancellationToken ct) =>
-            RunInScopeAsync((sp, token) => sp.GetRequiredService<ITuiEngine>().RunAsync(channel, width, height, token), ct);
+        /// <param name="onEngineResolved">
+        /// Invoked with the scope's <see cref="ITuiEngine"/> as soon as it is resolved, so the
+        /// caller's "window-change" handler has something to reach even before RunAsync completes
+        /// (and can keep reaching it, via a null-conditional call, if it fires before this runs).
+        /// </param>
+        private Task RunTuiInScopeAsync(
+            SshChannel channel, uint width, uint height, CancellationToken ct,
+            Action<ITuiEngine> onEngineResolved) =>
+            RunInScopeAsync((sp, token) =>
+            {
+                var engine = sp.GetRequiredService<ITuiEngine>();
+                onEngineResolved(engine);
+                return engine.RunAsync(channel, width, height, token);
+            }, ct);
 
         // ── Private Utilities ─────────────────────────────────────────────
 

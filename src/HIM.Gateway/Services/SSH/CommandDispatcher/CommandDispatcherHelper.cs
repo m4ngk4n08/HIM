@@ -49,6 +49,16 @@ namespace HIM.Gateway.Services.SSH.CommandDispatcher
             await stream.WriteAsync(Encoding.UTF8.GetBytes(sequence), ct);
         }
 
+        public async Task ResetScrollingRegionAsync(Stream stream, CancellationToken ct)
+        {
+            // ANSI DECSTBM with no parameters restores the region to the full screen. DECSTBM
+            // persists in the client's own terminal after the session ends, so this must run on
+            // every exit path - otherwise a visitor is left with a broken scroll region after
+            // disconnecting.
+            var sequence = "\x1b[r";
+            await stream.WriteAsync(Encoding.UTF8.GetBytes(sequence), ct);
+        }
+
         public async Task MoveCursorAsync(Stream stream, int row, int col, CancellationToken ct)
         {
             // ANSI CUP: ESC [ <row> ; <col> H

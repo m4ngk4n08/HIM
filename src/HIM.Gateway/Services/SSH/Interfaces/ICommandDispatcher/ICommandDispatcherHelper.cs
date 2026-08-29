@@ -7,6 +7,7 @@ namespace HIM.Gateway.Services.SSH.Interfaces.ICommandDispatcher
     {
         Task<string> ReadInputManualAsync(IAnsiConsole console, Stream stream, CancellationToken ct);
         Task SetScrollingRegionAsync(Stream stream, int top, int bottom, CancellationToken ct);
+        Task ResetScrollingRegionAsync(Stream stream, CancellationToken ct);
         Task MoveCursorAsync(Stream stream, int row, int col, CancellationToken ct);
     }
 }

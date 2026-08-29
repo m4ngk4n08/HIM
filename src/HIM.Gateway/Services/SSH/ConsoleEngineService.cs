@@ -254,8 +254,6 @@ namespace HIM.Gateway.Services.SSH
                     await Task.Delay(200, ct);
                     ctx.Status("Retrieving Portfolio Knowledge Base...");
                     await Task.Delay(200, ct);
-                    ctx.Status("For a better experience, resize your window (Ctrl+- / Cmd+-).");
-                    await Task.Delay(3000, ct);
                     ctx.Status("Utilizing GC..");
                     await Task.Delay(200, ct);
                     ctx.Status("Settings up sandbox...");

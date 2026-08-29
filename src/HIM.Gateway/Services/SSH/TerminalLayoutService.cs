@@ -1,6 +1,7 @@
 using HIM.Gateway.Services.SSH.Interfaces;
 using HIM.Gateway.Services.SSH.Interfaces.ICommandDispatcher;
 using Spectre.Console;
+using Spectre.Console.Rendering;
 using System.Text;
 
 namespace HIM.Gateway.Services.SSH;
@@ -34,50 +35,67 @@ public class TerminalLayoutService : ITerminalLayoutService
         await stream.WriteAsync(Encoding.UTF8.GetBytes("\x1b[2J\x1b[H"), ct);
         console.Clear();
 
-        // 2. Render all static parts and track line count
+        // 2. Decide what to draw for this terminal size. This is the pure decision (see
+        // ChromeLayout.cs) - width/height in, variant + invariants out, no rendering yet.
+        var layout = ChromeLayoutPlanner.Decide(console.Profile.Width, console.Profile.Height);
+
+        // 3. Render the chosen variant and measure the *actual* rendered output as we go,
+        // rather than guessing. int lineCount tracks the true row count so the DECSTBM
+        // boundary below reflects what was really drawn, not an estimate of it.
         int lineCount = 0;
 
-        // Header (panel + tagline)
-        RenderHeader(console);
-        lineCount += GetHeaderLineCount(console);
-        console.WriteLine();
-        lineCount++;
+        switch (layout.Variant)
+        {
+            case ChromeVariant.Full:
+                lineCount += RenderHeader(console);
+                console.WriteLine();
+                lineCount++;
 
-        // Status bar
-        RenderStatusBar(console);
-        lineCount++;
-        console.WriteLine();
-        lineCount++;
+                RenderStatusBar(console);
+                lineCount++;
 
-        // Welcome
-        console.MarkupLine($"[{ThemeService.PrimaryColor}]Welcome to Angelo's Portfolio.[/] [grey](SSH Edition)[/]");
-        lineCount++;
-        console.MarkupLine("[grey]Type [yellow]/help[/] for command list or start chatting with the AI.[/]");
-        lineCount++;
-        console.WriteLine();
-        lineCount++;
+                console.MarkupLine($"[{ThemeService.PrimaryColor}]Welcome to Angelo's Portfolio.[/] [grey](SSH Edition)[/]");
+                lineCount++;
+                console.MarkupLine("[grey]Type [yellow]/help[/] for command list or start chatting with the AI.[/]");
+                lineCount++;
 
-        // Footer
-        RenderFooter(console);
-        lineCount++;
-        console.WriteLine();
-        lineCount++;
+                RenderFooter(console);
+                lineCount++;
+                break;
 
-        // 3. The first line of the scrolling region is the next line (1‑based)
+            case ChromeVariant.Compact:
+                RenderCompactStatusLine(console);
+                lineCount++;
+                break;
+
+            case ChromeVariant.None:
+                // Nothing but the prompt - the terminal is too small for any chrome.
+                break;
+        }
+
+        // 4. Only reserve a scrolling region when the layout decided there's a usable amount of
+        // content room for it (see ChromeLayoutPlanner's invariants). Otherwise let output flow
+        // into normal scrollback rather than a DECSTBM region too small to read - and make sure
+        // no stale region survives from a previous, larger render (e.g. after a live resize).
+        if (layout.FirstScrollLine == 0)
+        {
+            await _commandDispatcher.ResetScrollingRegionAsync(stream, ct);
+            return;
+        }
+
         int firstScrollLine = lineCount + 1;
-
-        // Clamp to terminal height
-        if (firstScrollLine > console.Profile.Height)
-            firstScrollLine = console.Profile.Height;
-
-        // 4. Set scrolling region from firstScrollLine to bottom
         await _commandDispatcher.SetScrollingRegionAsync(stream, firstScrollLine, console.Profile.Height, ct);
 
         // 5. Move cursor to the start of the scrolling region
         await _commandDispatcher.MoveCursorAsync(stream, firstScrollLine, 1, ct);
     }
 
-    private void RenderHeader(IAnsiConsole console)
+    /// <summary>
+    /// Renders the Figlet banner panel and returns how many lines it actually occupies, measured
+    /// from its own rendered segments rather than guessed. Replaces the old GetHeaderLineCount,
+    /// which hard-coded 8 or 5 depending on width and admitted in a comment that it was an estimate.
+    /// </summary>
+    private static int RenderHeader(IAnsiConsole console)
     {
         var figlet = new FigletText("H I M")
             .Centered()
@@ -89,9 +107,22 @@ public class TerminalLayoutService : ITerminalLayoutService
             Border = BoxBorder.Rounded,
             BorderStyle = new Style(ThemeService.PrimaryColor)
         };
-        console.Write(panel);
 
-        console.MarkupLine($"[grey]▸ [/][italic {ThemeService.SecondaryColor}]\"For a better experience, resize your window (Ctrl+- / Cmd+-).\"[/]");
+        int lines = MeasureLines(panel, console);
+        console.Write(panel);
+        return lines;
+    }
+
+    /// <summary>
+    /// Renders an <see cref="IRenderable"/> to segments using the same pipeline Spectre uses to
+    /// actually draw it, and counts the resulting lines via <see cref="Segment.SplitLines(System.Collections.Generic.IEnumerable{Segment})"/>.
+    /// This is the "measure, don't guess" seam: the number this returns is produced by the same
+    /// code that draws the content, so it can't drift out of sync with what the terminal receives.
+    /// </summary>
+    private static int MeasureLines(IRenderable renderable, IAnsiConsole console)
+    {
+        var segments = renderable.GetSegments(console);
+        return Segment.SplitLines(segments).Count;
     }
 
     private void RenderStatusBar(IAnsiConsole console)
@@ -103,18 +134,20 @@ public class TerminalLayoutService : ITerminalLayoutService
         console.MarkupLine(status);
     }
 
+    /// <summary>
+    /// The single status line drawn for <see cref="ChromeVariant.Compact"/> terminals - too short
+    /// for the full Figlet header, but wide enough to show what's running.
+    /// </summary>
+    private void RenderCompactStatusLine(IAnsiConsole console)
+    {
+        var model = "llama3.3‑70b (Groq)";
+        console.MarkupLine($"[{ThemeService.PrimaryColor}]●[/] HIM [grey]│[/] [white]{model}[/] [grey]│[/] [{ThemeService.AccentColor}]SSH ACTIVE[/]");
+    }
+
     private void RenderFooter(IAnsiConsole console)
     {
         var fact = _funFacts[_funFactIndex % _funFacts.Length];
         _funFactIndex++;
         console.MarkupLine($"[grey]──[/] {fact} [grey]──[/]");
-    }
-
-    private int GetHeaderLineCount(IAnsiConsole console)
-    {
-        // Estimate lines: Figlet panel (varies) + tagline (1)
-        // Figlet panel: ~5-6 lines depending on width, plus padding.
-        // Conservative estimate.
-        return console.Profile.Width > 60 ? 8 : 5;
     }
 }
