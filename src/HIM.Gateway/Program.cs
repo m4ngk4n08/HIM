@@ -60,15 +60,7 @@ builder.Services.Configure<AiServiceSettings>(builder.Configuration.GetSection("
 
 builder.Services.AddService();
 
-// Enforce correct service lifetimes at startup: ValidateScopes catches a scoped service
-// resolved from the root provider (which would silently pin one visitor's session state
-// for the life of the process), and ValidateOnBuild catches a singleton that captures a
-// scoped/transient dependency in its constructor. Both fail fast instead of failing silently.
-builder.ConfigureContainer(new DefaultServiceProviderFactory(new ServiceProviderOptions
-{
-    ValidateScopes = true,
-    ValidateOnBuild = true
-}));
+builder.ConfigureContainer(new DefaultServiceProviderFactory(ServiceExtensions.ContainerValidationOptions));
 
 // Resilient AI Client(Typed HttpClient Pattern)
 // Used AddHttpClient with a Retry Policy to handle transient network errors.

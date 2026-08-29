@@ -547,17 +547,24 @@ namespace HIM.Gateway.Services.SSH
         }
 
         /// <summary>
-        /// Creates one DI scope per shell channel so every per-session service (TUI engine,
-        /// command service, game state, etc.) gets its own instance instead of sharing the
-        /// process-wide singleton graph. The scope is torn down when the TUI run completes,
-        /// on exception, and on cancellation — "await using" guarantees disposal on all three.
+        /// Creates one DI scope, hands its <see cref="IServiceProvider"/> to <paramref name="work"/>,
+        /// and tears the scope down when <paramref name="work"/> completes, throws, or is cancelled —
+        /// "await using" guarantees disposal on all three. Internal (rather than private) so tests can
+        /// drive this exact scoping seam directly instead of re-implementing the pattern.
         /// </summary>
-        private async Task RunTuiInScopeAsync(SshChannel channel, uint width, uint height, CancellationToken ct)
+        internal async Task RunInScopeAsync(Func<IServiceProvider, CancellationToken, Task> work, CancellationToken ct)
         {
             await using var scope = _serviceScopeFactory.CreateAsyncScope();
-            var tuiEngine = scope.ServiceProvider.GetRequiredService<ITuiEngine>();
-            await tuiEngine.RunAsync(channel, width, height, ct);
+            await work(scope.ServiceProvider, ct);
         }
+
+        /// <summary>
+        /// Creates one DI scope per shell channel so every per-session service (TUI engine,
+        /// command service, game state, etc.) gets its own instance instead of sharing the
+        /// process-wide singleton graph.
+        /// </summary>
+        private Task RunTuiInScopeAsync(SshChannel channel, uint width, uint height, CancellationToken ct) =>
+            RunInScopeAsync((sp, token) => sp.GetRequiredService<ITuiEngine>().RunAsync(channel, width, height, token), ct);
 
         // ── Private Utilities ─────────────────────────────────────────────
 

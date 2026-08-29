@@ -47,4 +47,8 @@
     <Folder Include="Services\SSH\Interfaces\IGame\ITheGame\" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="HIM.Gateway.Tests" />
+  </ItemGroup>
+
 </Project>

@@ -41,10 +41,6 @@ internal static class GatewayServiceProviderFactory
             client.BaseAddress = new Uri(settings.BaseUrl);
         });
 
-        return services.BuildServiceProvider(new ServiceProviderOptions
-        {
-            ValidateScopes = true,
-            ValidateOnBuild = true
-        });
+        return services.BuildServiceProvider(ServiceExtensions.ContainerValidationOptions);
     }
 }

@@ -2,14 +2,11 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text;
-using System.Text.Json;
 using HIM.Gateway.Extensions;
-using HIM.Gateway.Models;
 using HIM.Gateway.Models.Knowledge;
 using HIM.Gateway.Services.SSH.Interfaces;
 using HIM.Gateway.Services.SSH.Interfaces.ICommandDispatcher;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Serilog.Context;
 using Spectre.Console;
 
@@ -26,7 +23,6 @@ public class CommandService : ICommandService
     private readonly ICommandDispatcherHelper _commandDispatcherHelper;
     private readonly ITerminalLayoutService _terminalLayoutService;
     private readonly ILogger<CommandService> _logger;
-    private readonly KnowledgeBaseSettings _kbSettings;
     private readonly UserSessionState _sessionState;
     private readonly TimeSpan _cooldownDuration = TimeSpan.FromSeconds(3);
 
@@ -39,10 +35,9 @@ public class CommandService : ICommandService
         ICommandDispatcherHelper commandDispatcherHelper,
         ITerminalLayoutService terminalLayoutService,
         ILogger<CommandService> logger,
-        IOptions<KnowledgeBaseSettings> kbSettings,
+        IPortfolioDataProvider portfolioDataProvider,
         UserSessionState sessionState)
     {
-        _kbSettings = kbSettings.Value;
         _aiClientService = aiClientService;
         _gameCommandService = gameCommandService;
         _menuCommandService = menuCommandService;
@@ -52,25 +47,7 @@ public class CommandService : ICommandService
         _terminalLayoutService = terminalLayoutService;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _sessionState = sessionState;
-        LoadKnowledgeBase();
-    }
-
-    private void LoadKnowledgeBase()
-    {
-        try
-        {
-            if (!File.Exists(_kbSettings.FilePath)) return;
-
-            var json = File.ReadAllText(_kbSettings.FilePath);
-            _data = JsonSerializer.Deserialize<PortfolioData>(json, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to load knowledge base from {FilePath}", _kbSettings.FilePath);
-        }
+        _data = portfolioDataProvider.Data;
     }
 
     private void LogWithSession(string sessionId, LogLevel level, string message, params object[] args)

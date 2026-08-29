@@ -1,19 +1,18 @@
+using HIM.Gateway.Extensions;
+using HIM.Gateway.Models;
+using HIM.Gateway.Services.SSH;
+using HIM.Gateway.Services.SSH.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace HIM.Gateway.Tests;
 
 /// <summary>
-/// SshServerListener.RunTuiInScopeAsync (the method that wraps ITuiEngine.RunAsync per shell
-/// channel) follows the exact shape exercised here:
-///
-///     await using var scope = _serviceScopeFactory.CreateAsyncScope();
-///     var svc = scope.ServiceProvider.GetRequiredService&lt;T&gt;();
-///     await svc.DoWorkAsync(ct);
-///
-/// SshChannel comes from the SSH library and can't be constructed in a unit test, so this
-/// exercises the disposal guarantee of that exact "await using" pattern directly instead -
-/// proving the scope (and therefore every per-session service resolved from it) is disposed
-/// whether the awaited work completes normally, throws, or is cancelled.
+/// Exercises SshServerListener.RunInScopeAsync directly - the internal seam that
+/// RunTuiInScopeAsync (invoked per shell channel) delegates to. Proves the scope (and
+/// therefore every per-session service resolved from it) is disposed whether the work
+/// delegate completes normally, throws, or is cancelled.
 /// </summary>
 public class SessionScopeDisposalTests
 {
@@ -28,45 +27,53 @@ public class SessionScopeDisposalTests
         }
     }
 
-    private static ServiceProvider BuildProvider()
+    private static SshServerListener BuildListener(out IServiceProvider probeProvider)
     {
-        var services = new ServiceCollection();
-        services.AddScoped<DisposalProbe>();
-        return services.BuildServiceProvider(new ServiceProviderOptions
-        {
-            ValidateScopes = true,
-            ValidateOnBuild = true
-        });
+        var probeServices = new ServiceCollection();
+        probeServices.AddScoped<DisposalProbe>();
+        probeProvider = probeServices.BuildServiceProvider(ServiceExtensions.ContainerValidationOptions);
+
+        using var dependencyProvider = GatewayServiceProviderFactory.Build();
+
+        return new SshServerListener(
+            probeProvider.GetRequiredService<IServiceScopeFactory>(),
+            dependencyProvider.GetRequiredService<IHostKeyService>(),
+            dependencyProvider.GetRequiredService<IAuthenticationService>(),
+            dependencyProvider.GetRequiredService<IIpBanService>(),
+            dependencyProvider.GetRequiredService<ILogger<SshServerListener>>(),
+            dependencyProvider.GetRequiredService<IOptions<SshSettings>>());
     }
 
     [Fact]
     public async Task Scope_IsDisposed_WhenWorkCompletesNormally()
     {
-        using var provider = BuildProvider();
-        var factory = provider.GetRequiredService<IServiceScopeFactory>();
-        DisposalProbe probe;
+        var listener = BuildListener(out var probeProvider);
+        using var _ = probeProvider as IDisposable;
+        DisposalProbe? probe = null;
 
-        await using (var scope = factory.CreateAsyncScope())
+        await listener.RunInScopeAsync(async (sp, ct) =>
         {
-            probe = scope.ServiceProvider.GetRequiredService<DisposalProbe>();
+            probe = sp.GetRequiredService<DisposalProbe>();
             await Task.CompletedTask; // stand-in for tuiEngine.RunAsync(...)
-        }
+        }, CancellationToken.None);
 
-        Assert.True(probe.Disposed);
+        Assert.True(probe!.Disposed);
     }
 
     [Fact]
     public async Task Scope_IsDisposed_WhenWorkThrows()
     {
-        using var provider = BuildProvider();
-        var factory = provider.GetRequiredService<IServiceScopeFactory>();
+        var listener = BuildListener(out var probeProvider);
+        using var _ = probeProvider as IDisposable;
         DisposalProbe? probe = null;
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
-            await using var scope = factory.CreateAsyncScope();
-            probe = scope.ServiceProvider.GetRequiredService<DisposalProbe>();
-            throw new InvalidOperationException("simulated channel failure");
+            await listener.RunInScopeAsync((sp, ct) =>
+            {
+                probe = sp.GetRequiredService<DisposalProbe>();
+                throw new InvalidOperationException("simulated channel failure");
+            }, CancellationToken.None);
         });
 
         Assert.True(probe!.Disposed);
@@ -75,8 +82,8 @@ public class SessionScopeDisposalTests
     [Fact]
     public async Task Scope_IsDisposed_WhenWorkIsCancelled()
     {
-        using var provider = BuildProvider();
-        var factory = provider.GetRequiredService<IServiceScopeFactory>();
+        var listener = BuildListener(out var probeProvider);
+        using var _ = probeProvider as IDisposable;
         DisposalProbe? probe = null;
 
         using var cts = new CancellationTokenSource();
@@ -84,9 +91,11 @@ public class SessionScopeDisposalTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
         {
-            await using var scope = factory.CreateAsyncScope();
-            probe = scope.ServiceProvider.GetRequiredService<DisposalProbe>();
-            await Task.Delay(Timeout.Infinite, cts.Token); // stand-in for a cancelled RunAsync
+            await listener.RunInScopeAsync(async (sp, ct) =>
+            {
+                probe = sp.GetRequiredService<DisposalProbe>();
+                await Task.Delay(Timeout.Infinite, ct); // stand-in for a cancelled RunAsync
+            }, cts.Token);
         });
 
         Assert.True(probe!.Disposed);

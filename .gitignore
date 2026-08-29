@@ -36,7 +36,6 @@ bld/
 appsettings.json
 appsettings.Development.json
 *.secrets.json
-src/HIM.AiService/knowledge-base.json
 
 # Docker bind-mounts ./knowledge-base.json (repo root) into the AI service container;
 # when that host file doesn't exist, Docker silently creates an empty directory here,
