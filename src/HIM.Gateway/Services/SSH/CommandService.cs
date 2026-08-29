@@ -14,7 +14,7 @@ namespace HIM.Gateway.Services.SSH;
 
 public class CommandService : ICommandService
 {
-    private PortfolioData? _data;
+    private readonly PortfolioData? _data;
     private readonly IAiClientService _aiClientService;
     private readonly IGameCommandService _gameCommandService;
     private readonly IMenuCommandService _menuCommandService;

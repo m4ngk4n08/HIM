@@ -16,7 +16,7 @@ namespace HIM.Gateway.Extensions
         // for the life of the process), and ValidateOnBuild catches a singleton that captures a
         // scoped/transient dependency in its constructor. Both fail fast instead of failing silently.
         // Shared by Program.cs and the test service provider factory so they can't drift apart.
-        public static ServiceProviderOptions ContainerValidationOptions { get; } = new()
+        public static ServiceProviderOptions ContainerValidationOptions => new()
         {
             ValidateScopes = true,
             ValidateOnBuild = true

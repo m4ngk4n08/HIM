@@ -53,6 +53,22 @@ public class ServiceLifetimeTests
     }
 
     [Fact]
+    public void PortfolioDataProvider_IsSingleton_AcrossConcurrentSessions()
+    {
+        // AddScoped here would mean a file read and JSON parse on every SSH connection -
+        // the exact regression the amendment in a118b7a fixed. Pin it down.
+        using var provider = GatewayServiceProviderFactory.Build();
+
+        using var sessionOneScope = provider.CreateScope();
+        using var sessionTwoScope = provider.CreateScope();
+
+        var one = sessionOneScope.ServiceProvider.GetRequiredService<IPortfolioDataProvider>();
+        var two = sessionTwoScope.ServiceProvider.GetRequiredService<IPortfolioDataProvider>();
+
+        Assert.Same(one, two);
+    }
+
+    [Fact]
     public void TwoConcurrentSessions_GetDistinctUserSessionState()
     {
         using var provider = GatewayServiceProviderFactory.Build();

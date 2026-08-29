@@ -27,31 +27,50 @@ public class SessionScopeDisposalTests
         }
     }
 
-    private static SshServerListener BuildListener(out IServiceProvider probeProvider)
+    private sealed class ListenerFixture : IDisposable
+    {
+        public required SshServerListener Listener { get; init; }
+        public required ServiceProvider ProbeProvider { get; init; }
+        public required ServiceProvider DependencyProvider { get; init; }
+
+        public void Dispose()
+        {
+            ProbeProvider.Dispose();
+            DependencyProvider.Dispose();
+        }
+    }
+
+    private static ListenerFixture BuildListener()
     {
         var probeServices = new ServiceCollection();
         probeServices.AddScoped<DisposalProbe>();
-        probeProvider = probeServices.BuildServiceProvider(ServiceExtensions.ContainerValidationOptions);
+        var probeProvider = probeServices.BuildServiceProvider(ServiceExtensions.ContainerValidationOptions);
 
-        using var dependencyProvider = GatewayServiceProviderFactory.Build();
+        var dependencyProvider = GatewayServiceProviderFactory.Build();
 
-        return new SshServerListener(
+        var listener = new SshServerListener(
             probeProvider.GetRequiredService<IServiceScopeFactory>(),
             dependencyProvider.GetRequiredService<IHostKeyService>(),
             dependencyProvider.GetRequiredService<IAuthenticationService>(),
             dependencyProvider.GetRequiredService<IIpBanService>(),
             dependencyProvider.GetRequiredService<ILogger<SshServerListener>>(),
             dependencyProvider.GetRequiredService<IOptions<SshSettings>>());
+
+        return new ListenerFixture
+        {
+            Listener = listener,
+            ProbeProvider = probeProvider,
+            DependencyProvider = dependencyProvider
+        };
     }
 
     [Fact]
     public async Task Scope_IsDisposed_WhenWorkCompletesNormally()
     {
-        var listener = BuildListener(out var probeProvider);
-        using var _ = probeProvider as IDisposable;
+        using var fixture = BuildListener();
         DisposalProbe? probe = null;
 
-        await listener.RunInScopeAsync(async (sp, ct) =>
+        await fixture.Listener.RunInScopeAsync(async (sp, ct) =>
         {
             probe = sp.GetRequiredService<DisposalProbe>();
             await Task.CompletedTask; // stand-in for tuiEngine.RunAsync(...)
@@ -63,13 +82,12 @@ public class SessionScopeDisposalTests
     [Fact]
     public async Task Scope_IsDisposed_WhenWorkThrows()
     {
-        var listener = BuildListener(out var probeProvider);
-        using var _ = probeProvider as IDisposable;
+        using var fixture = BuildListener();
         DisposalProbe? probe = null;
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
-            await listener.RunInScopeAsync((sp, ct) =>
+            await fixture.Listener.RunInScopeAsync((sp, ct) =>
             {
                 probe = sp.GetRequiredService<DisposalProbe>();
                 throw new InvalidOperationException("simulated channel failure");
@@ -82,8 +100,7 @@ public class SessionScopeDisposalTests
     [Fact]
     public async Task Scope_IsDisposed_WhenWorkIsCancelled()
     {
-        var listener = BuildListener(out var probeProvider);
-        using var _ = probeProvider as IDisposable;
+        using var fixture = BuildListener();
         DisposalProbe? probe = null;
 
         using var cts = new CancellationTokenSource();
@@ -91,7 +108,7 @@ public class SessionScopeDisposalTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
         {
-            await listener.RunInScopeAsync(async (sp, ct) =>
+            await fixture.Listener.RunInScopeAsync(async (sp, ct) =>
             {
                 probe = sp.GetRequiredService<DisposalProbe>();
                 await Task.Delay(Timeout.Infinite, ct); // stand-in for a cancelled RunAsync
