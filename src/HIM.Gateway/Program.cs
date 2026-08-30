@@ -52,8 +52,11 @@ builder.Logging.AddSerilog(new LoggerConfiguration()
     .MinimumLevel.Override("HIM", LogEventLevel.Debug)
     .CreateLogger());
 
-builder.Configuration.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true);
-builder.Configuration.AddEnvironmentVariables(); // Ensure environment variables override appsettings.json
+// CreateApplicationBuilder already loads, in precedence order: appsettings.json,
+// appsettings.{Environment}.json, user secrets (Development only), environment variables, command
+// line. Re-adding appsettings.json here would append it *after* user secrets and override them,
+// which silently defeats keeping the shared secret out of the repo. Environment variables are
+// already in the chain and still win, so the re-add they needed is gone too.
 
 builder.Services.Configure<SshSettings>(builder.Configuration.GetSection("SshSettings"));
 builder.Services.Configure<AiServiceSettings>(builder.Configuration.GetSection("AiServiceSettings"));

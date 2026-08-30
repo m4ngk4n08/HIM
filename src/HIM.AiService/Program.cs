@@ -7,8 +7,11 @@ using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Configuration.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true);
-builder.Configuration.AddEnvironmentVariables();
+// CreateBuilder already loads, in precedence order: appsettings.json, appsettings.{Environment}.json,
+// user secrets (Development only), environment variables, command line. Re-adding appsettings.json
+// here would append it *after* user secrets and so override them - which silently defeats keeping the
+// API keys out of the repo. Environment variables are likewise already in the chain, and re-adding
+// them was only needed to undo the re-added JSON file.
 
 // Bind Configuration (Options Pattern - SOLID: Dependency Inversion)
 // Fail closed: the service must not start without a shared secret configured.

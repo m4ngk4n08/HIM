@@ -5,6 +5,9 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- Lets the shared secret live outside the repo for local runs; the container supplies it
+         through AiServiceSettings__SharedSecret instead. -->
+    <UserSecretsId>d4f1a2b8-3c67-4e59-9a1d-7b2e5c8f0a63</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
