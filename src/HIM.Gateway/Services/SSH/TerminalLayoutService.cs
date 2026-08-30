@@ -15,7 +15,7 @@ public class TerminalLayoutService : ITerminalLayoutService
     private readonly string[] _funFacts = new[]
     {
         "🚀 Running on a $4/month VPS",
-        "🧠 Powered by ONNX + Groq LPU",
+        "🧠 Powered by ONNX + Gemini",
         "⚡ SIMD‑accelerated vector search",
         "🔒 Hardened with nftables + Fail2Ban",
         "💻 Built with .NET 10 & C#",

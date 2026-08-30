@@ -88,7 +88,7 @@
     {
       "name": "HIM (Heuristic Interactive Mockup) - AI SSH Portfolio",
       "role": "Architect & Lead Developer",
-      "stack": ".NET 10, C#, Microsoft.DevTunnels.Ssh, Spectre.Console, ONNX Runtime, Groq LPU, Semantic Kernel, System.Numerics (SIMD), Docker, nftables, Fail2Ban",
+      "stack": ".NET 10, C#, Microsoft.DevTunnels.Ssh, Spectre.Console, ONNX Runtime, Google Gemini, Semantic Kernel, System.Numerics (SIMD), Docker, nftables, Fail2Ban",
       "status": "Production-Ready (Phase 6 Completed)",
       "github_link": "https://github.com/m4ngk4n08/HIM",
       "live_access": "ssh angelodavales.info",
@@ -96,7 +96,7 @@
       "architecture": {
         "overview": "Three-tier microservices design: HIM.Gateway (SSH server entry point), HIM.AiService (RAG-based AI microservice), and an integrated TUI application.",
         "him_gateway": "Custom SSH server built on Microsoft.DevTunnels.Ssh (v3.9.3). Manages TUI rendering via Spectre.Console, session lifecycle, and hosts the pluggable Game Engine. Exposed on port 22 for frictionless user access.",
-        "him_ai_service": "A RAG-based microservice implementing a local all-minilm-l6-v2 ONNX model for zero-latency, in-process embeddings. LLM inference is handled by a Groq-backed Semantic Kernel using the llama-3.3-70b-versatile model.",
+        "him_ai_service": "A RAG-based microservice implementing a local all-minilm-l6-v2 ONNX model for zero-latency, in-process embeddings. LLM inference is handled by a Semantic Kernel connector using gemini-3.1-flash-lite (Gemini).",
         "tui_application": "Interactive terminal frontend integrated directly into the Gateway's session handling, featuring splash screens, command processing, and live AI chat."
       },
       "key_technical_achievements": [
@@ -113,7 +113,7 @@
       ],
       "ai_engine_deep_dive": {
         "embedding_model": "Local all-minilm-l6-v2 ONNX model — runs fully in-process, zero external API calls for embeddings.",
-        "llm_inference": "Groq LPU-backed Semantic Kernel using llama-3.3-70b-versatile for fast, high-quality response generation.",
+        "llm_inference": "Semantic Kernel connector using gemini-3.1-flash-lite (Gemini) for fast, high-quality response generation.",
         "vector_search": "In-process cosine similarity using SIMD Dot Product via System.Numerics. Mean Pooling and L2 Normalization applied in-process for semantic accuracy.",
         "cost_impact": "Eliminated the need for 8GB+ RAM typically required by Python-based embedding services. Entire AI ecosystem runs on a $4/month VPS — an estimated 80% reduction in server costs."
       },
