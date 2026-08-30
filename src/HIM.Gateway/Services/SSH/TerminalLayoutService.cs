@@ -70,6 +70,9 @@ public class TerminalLayoutService : ITerminalLayoutService
             case ChromeVariant.Compact:
                 RenderCompactStatusLine(console);
                 lineCount++;
+
+                console.MarkupLine("[grey]/help for commands · or just type to chat with the AI[/]");
+                lineCount++;
                 break;
 
             case ChromeVariant.None:
@@ -139,8 +142,11 @@ public class TerminalLayoutService : ITerminalLayoutService
     }
 
     /// <summary>
-    /// The single status line drawn for <see cref="ChromeVariant.Compact"/> terminals - too short
-    /// for the full Figlet header, but wide enough to show what's running.
+    /// The status line drawn for <see cref="ChromeVariant.Compact"/> terminals - too short for the
+    /// full Figlet header, but wide enough to show what's running. A second pinned line (see the
+    /// call site in <see cref="InitializeTerminalLayoutAsync"/>) restores the /help and
+    /// just-type-to-chat hint that Full's welcome text carries, since Compact has no other room
+    /// for it and chrome, unlike scrollback, stays visible for the whole session.
     /// </summary>
     private void RenderCompactStatusLine(IAnsiConsole console)
     {

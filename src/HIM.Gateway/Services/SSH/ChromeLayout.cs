@@ -9,7 +9,7 @@ namespace HIM.Gateway.Services.SSH
         /// <summary>Nothing but the prompt - the terminal is too small for any chrome at all.</summary>
         None,
 
-        /// <summary>One status line: "● HIM │ &lt;model&gt; │ SSH ACTIVE".</summary>
+        /// <summary>Status line plus a pinned hint line: "/help for commands · or just type to chat with the AI".</summary>
         Compact,
 
         /// <summary>Figlet panel, status bar, welcome text, help text, fun-fact footer.</summary>
@@ -55,7 +55,7 @@ namespace HIM.Gateway.Services.SSH
         // TerminalLayoutService renders the same composition and measures the true output via
         // Segment.SplitLines for the actual DECSTBM boundary; these constants exist only so the
         // decision below can be evaluated without a console.
-        internal const int CompactChromeLines = 1;
+        internal const int CompactChromeLines = 2;
         internal const int FullChromeLines = 13;
 
         // Invariant 1: chrome may never eat more than this fraction of the terminal height.
