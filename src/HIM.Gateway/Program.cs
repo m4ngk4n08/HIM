@@ -57,6 +57,7 @@ builder.Configuration.AddEnvironmentVariables(); // Ensure environment variables
 
 builder.Services.Configure<SshSettings>(builder.Configuration.GetSection("SshSettings"));
 builder.Services.Configure<AiServiceSettings>(builder.Configuration.GetSection("AiServiceSettings"));
+builder.Services.Configure<KnowledgeBaseSettings>(builder.Configuration.GetSection("KnowledgeBaseSettings"));
 
 builder.Services.AddService();
 
