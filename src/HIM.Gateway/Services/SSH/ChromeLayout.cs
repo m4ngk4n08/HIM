@@ -67,7 +67,12 @@ namespace HIM.Gateway.Services.SSH
 
         private const int MinHeightForAnyChrome = 20;
         private const int MinWidthForAnyChrome = 40;
-        private const int MinHeightForFull = 30;
+
+        // 44, not 30: with FullChromeLines = 13, invariant 1 already degrades Full to Compact
+        // for any height below ceil(13 / MaxChromeFraction) = 44, regardless of this constant.
+        // This is the height at which Full can actually be selected - set it to match reality
+        // rather than to a number invariant 1 silently overrides.
+        private const int MinHeightForFull = 44;
         private const int MinWidthForFull = 60;
 
         public static ChromeLayout Decide(int width, int height)

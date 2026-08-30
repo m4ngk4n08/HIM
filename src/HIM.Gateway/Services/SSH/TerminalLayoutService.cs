@@ -45,7 +45,10 @@ public class TerminalLayoutService : ITerminalLayoutService
 
         // 3. Render the chosen variant and measure the *actual* rendered output as we go,
         // rather than guessing. int lineCount tracks the true row count so the DECSTBM
-        // boundary below reflects what was really drawn, not an estimate of it.
+        // boundary below reflects what was really drawn, not an estimate of it. Every markup
+        // line is routed through RenderFittedMarkupLine (or RenderHeader's own MeasureLines
+        // call), which shrinks its content until it measures as exactly one row at the
+        // console's current width - so lineCount can never under-report a wrapped line.
         int lineCount = 0;
 
         switch (layout.Variant)
@@ -55,24 +58,23 @@ public class TerminalLayoutService : ITerminalLayoutService
                 console.WriteLine();
                 lineCount++;
 
-                RenderStatusBar(console);
-                lineCount++;
+                lineCount += RenderStatusBar(console);
 
-                console.MarkupLine($"[{ThemeService.PrimaryColor}]Welcome to Angelo's Portfolio.[/] [grey](SSH Edition)[/]");
-                lineCount++;
-                console.MarkupLine("[grey]Type [yellow]/help[/] for command list or start chatting with the AI.[/]");
-                lineCount++;
+                lineCount += RenderFittedMarkupLine(console,
+                    text => $"[{ThemeService.PrimaryColor}]{Markup.Escape(text)}[/] [grey](SSH Edition)[/]",
+                    "Welcome to Angelo's Portfolio.");
+                lineCount += RenderFittedMarkupLine(console,
+                    text => $"[grey]{Markup.Escape(text)}[/]",
+                    "Type /help for command list or start chatting with the AI.");
 
-                RenderFooter(console);
-                lineCount++;
+                lineCount += RenderFooter(console);
                 break;
 
             case ChromeVariant.Compact:
-                RenderCompactStatusLine(console);
-                lineCount++;
-
-                console.MarkupLine("[grey]/help for commands · or just type to chat with the AI[/]");
-                lineCount++;
+                lineCount += RenderCompactStatusLine(console);
+                lineCount += RenderFittedMarkupLine(console,
+                    text => $"[grey]{Markup.Escape(text)}[/]",
+                    "/help for commands · or just type to chat with the AI");
                 break;
 
             case ChromeVariant.None:
@@ -132,13 +134,55 @@ public class TerminalLayoutService : ITerminalLayoutService
         return Segment.SplitLines(segments).Count;
     }
 
-    private void RenderStatusBar(IAnsiConsole console)
+    /// <summary>
+    /// Writes a single-line markup value, shrinking <paramref name="content"/> (dropping whole
+    /// trailing words first, then characters as a last resort, appending an ellipsis once
+    /// anything is dropped) until <paramref name="buildMarkup"/>'s output measures as exactly one
+    /// row at the console's current width. This is what makes "no chrome line may wrap" true by
+    /// construction instead of by hand-picked width thresholds: it reuses the same
+    /// <see cref="MeasureLines"/> seam <see cref="RenderHeader"/> uses, so a line can never be
+    /// counted as one row while actually occupying more.
+    /// </summary>
+    private static int RenderFittedMarkupLine(IAnsiConsole console, Func<string, string> buildMarkup, string content)
     {
-        var model = _modelDisplayName;
+        string current = content;
+        string markup = buildMarkup(current);
+
+        while (MeasureLines(new Markup(markup), console) > 1)
+        {
+            int lastSpace = current.TrimEnd().LastIndexOf(' ');
+            if (lastSpace > 0)
+            {
+                current = current[..lastSpace];
+            }
+            else if (current.Length > 1)
+            {
+                current = current[..^1];
+            }
+            else
+            {
+                current = string.Empty;
+                markup = buildMarkup(current);
+                break;
+            }
+
+            markup = buildMarkup(current + "…");
+        }
+
+        int lines = MeasureLines(new Markup(markup), console);
+        console.MarkupLine(markup);
+        return lines;
+    }
+
+    private int RenderStatusBar(IAnsiConsole console)
+    {
         var theme = ThemeService.CurrentTheme.ToString().ToUpper();
 
-        var status = $"[{ThemeService.PrimaryColor}]●[/] MODEL: [white]{model}[/]  |  [{ThemeService.SecondaryColor}]▓[/] THEME: [white]{theme}[/]  |  [{ThemeService.AccentColor}]♢[/] SSH: [white]ACTIVE[/]";
-        console.MarkupLine(status);
+        return RenderFittedMarkupLine(console,
+            m => $"[{ThemeService.PrimaryColor}]●[/] MODEL: [white]{Markup.Escape(m)}[/]  |  " +
+                 $"[{ThemeService.SecondaryColor}]▓[/] THEME: [white]{theme}[/]  |  " +
+                 $"[{ThemeService.AccentColor}]♢[/] SSH: [white]ACTIVE[/]",
+            _modelDisplayName);
     }
 
     /// <summary>
@@ -148,16 +192,20 @@ public class TerminalLayoutService : ITerminalLayoutService
     /// just-type-to-chat hint that Full's welcome text carries, since Compact has no other room
     /// for it and chrome, unlike scrollback, stays visible for the whole session.
     /// </summary>
-    private void RenderCompactStatusLine(IAnsiConsole console)
+    private int RenderCompactStatusLine(IAnsiConsole console)
     {
-        var model = _modelDisplayName;
-        console.MarkupLine($"[{ThemeService.PrimaryColor}]●[/] HIM [grey]│[/] [white]{model}[/] [grey]│[/] [{ThemeService.AccentColor}]SSH ACTIVE[/]");
+        return RenderFittedMarkupLine(console,
+            m => $"[{ThemeService.PrimaryColor}]●[/] HIM [grey]│[/] [white]{Markup.Escape(m)}[/] [grey]│[/] [{ThemeService.AccentColor}]SSH ACTIVE[/]",
+            _modelDisplayName);
     }
 
-    private void RenderFooter(IAnsiConsole console)
+    private int RenderFooter(IAnsiConsole console)
     {
         var fact = _funFacts[_funFactIndex % _funFacts.Length];
         _funFactIndex++;
-        console.MarkupLine($"[grey]──[/] {fact} [grey]──[/]");
+
+        return RenderFittedMarkupLine(console,
+            f => $"[grey]──[/] {Markup.Escape(f)} [grey]──[/]",
+            fact);
     }
 }
