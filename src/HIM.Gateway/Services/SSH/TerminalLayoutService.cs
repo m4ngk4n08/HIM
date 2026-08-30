@@ -1,5 +1,7 @@
+using HIM.Gateway.Services.ServiceModel;
 using HIM.Gateway.Services.SSH.Interfaces;
 using HIM.Gateway.Services.SSH.Interfaces.ICommandDispatcher;
+using Microsoft.Extensions.Options;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 using System.Text;
@@ -9,6 +11,7 @@ namespace HIM.Gateway.Services.SSH;
 public class TerminalLayoutService : ITerminalLayoutService
 {
     private readonly ICommandDispatcherHelper _commandDispatcher;
+    private readonly string _modelDisplayName;
     private readonly string[] _funFacts = new[]
     {
         "🚀 Running on a $4/month VPS",
@@ -24,9 +27,10 @@ public class TerminalLayoutService : ITerminalLayoutService
     };
     private int _funFactIndex = 0;
 
-    public TerminalLayoutService(ICommandDispatcherHelper commandDispatcher)
+    public TerminalLayoutService(ICommandDispatcherHelper commandDispatcher, IOptions<AiServiceSettings> aiServiceSettings)
     {
         _commandDispatcher = commandDispatcher;
+        _modelDisplayName = aiServiceSettings.Value.ModelDisplayName;
     }
 
     public async Task InitializeTerminalLayoutAsync(IAnsiConsole console, Stream stream, CancellationToken ct)
@@ -127,7 +131,7 @@ public class TerminalLayoutService : ITerminalLayoutService
 
     private void RenderStatusBar(IAnsiConsole console)
     {
-        var model = "llama3.3‑70b (Groq)";
+        var model = _modelDisplayName;
         var theme = ThemeService.CurrentTheme.ToString().ToUpper();
 
         var status = $"[{ThemeService.PrimaryColor}]●[/] MODEL: [white]{model}[/]  |  [{ThemeService.SecondaryColor}]▓[/] THEME: [white]{theme}[/]  |  [{ThemeService.AccentColor}]♢[/] SSH: [white]ACTIVE[/]";
@@ -140,7 +144,7 @@ public class TerminalLayoutService : ITerminalLayoutService
     /// </summary>
     private void RenderCompactStatusLine(IAnsiConsole console)
     {
-        var model = "llama3.3‑70b (Groq)";
+        var model = _modelDisplayName;
         console.MarkupLine($"[{ThemeService.PrimaryColor}]●[/] HIM [grey]│[/] [white]{model}[/] [grey]│[/] [{ThemeService.AccentColor}]SSH ACTIVE[/]");
     }
 

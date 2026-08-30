@@ -3,7 +3,7 @@ services:
     image: ghcr.io/m4ngk4n08/him-ai:latest
     restart: always
     environment:
-      - AiSettings__ChatProvider=Groq
+      - AiSettings__ChatProvider=Gemini
       - AiSettings__Security__SharedSecret=${AI_SHARED_SECRET}
       - AiSettings__Groq__ApiKey=${GROQ_API_KEY}
       - AiSettings__Groq__ModelId=llama-3.3-70b-versatile
@@ -28,15 +28,7 @@ services:
       - "22:22"
     environment:
       - SshSettings__Port=22
-      # Must land in the ./keys bind mount below, not the container's writable layer,
-      # or the host key (and the SSH fingerprint visitors see) regenerates on every deploy.
-      - SshSettings__HostKeyPath=/app/keys/hostkey.json
-      # OPEN QUESTION (Task 03 item B): 127.0.0.1 is this container's own loopback, not
-      # him-ai's - two separate containers on the default network can't reach each other
-      # this way. This should be http://him-ai:8080. Left unchanged pending confirmation
-      # of what the VPS's hand-maintained compose file actually runs today - see
-      # plans/deploy-runbook.md step 3 before changing this line.
-      - AiServiceSettings__BaseUrl=http://127.0.0.1:8080
+      - AiServiceSettings__BaseUrl=http://him-ai:8080
       - AiServiceSettings__SharedSecret=${AI_SHARED_SECRET}
       - TERM=xterm-256color
       - DOTNET_SYSTEM_CONSOLE_ALLOW_ANSI_COLOR_REDIRECTION=true
@@ -45,7 +37,7 @@ services:
       # ----- Logging (new) -----
       - LOG_PATH=/app/Logs/gateway-log-.json
     volumes:
-      - ./keys:/app/keys
+      - ./keys/hostkey.pem:/app/hostkey.pem
       - /var/log/him:/app/Logs   # <--- same host directory
     depends_on:
       - him-ai

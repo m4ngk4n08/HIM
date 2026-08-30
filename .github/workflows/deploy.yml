@@ -46,6 +46,19 @@ jobs:
         needs: build-and-push
         runs-on: ubuntu-latest
         steps:
+            - name: Checkout Repository
+              uses: actions/checkout@v4
+
+            - name: Copy docker-compose.yml to VPS (does not touch .env)
+              uses: appleboy/scp-action@v0.1.7
+              with:
+                host: ${{ secrets.VPS_IP }}
+                username: root
+                key: ${{ secrets.SSH_PRIVATE_KEY }}
+                port: 43829
+                source: docker-compose.yml
+                target: ~/him-portfolio
+
             - name: Execute Remote Deployment via SSH
               uses: appleboy/ssh-action@v1.0.3
               with:
