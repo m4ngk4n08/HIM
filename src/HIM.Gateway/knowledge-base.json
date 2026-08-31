@@ -95,7 +95,7 @@
       "description": "A world-first AI-powered SSH portfolio. Users connect directly via any terminal (no browser, no app install) to interact with an AI persona representing Angelo's professional background. The entire ecosystem is engineered for extreme cost-efficiency and high performance, running on a $4/month VPS.",
       "architecture": {
         "overview": "Three-tier microservices design: HIM.Gateway (SSH server entry point), HIM.AiService (RAG-based AI microservice), and an integrated TUI application.",
-        "him_gateway": "Custom SSH server built on Microsoft.DevTunnels.Ssh (v3.9.3). Manages TUI rendering via Spectre.Console, session lifecycle, and hosts the pluggable Game Engine. Exposed on port 22 for frictionless user access.",
+        "him_gateway": "Custom SSH server built on Microsoft.DevTunnels.Ssh (v3.12.29). Manages TUI rendering via Spectre.Console, session lifecycle, and hosts the pluggable Game Engine. Exposed on port 22 for frictionless user access.",
         "him_ai_service": "A RAG-based microservice implementing a local all-minilm-l6-v2 ONNX model for zero-latency, in-process embeddings. LLM inference is handled by a Semantic Kernel connector using gemini-3.1-flash-lite (Gemini).",
         "tui_application": "Interactive terminal frontend integrated directly into the Gateway's session handling, featuring splash screens, command processing, and live AI chat."
       },

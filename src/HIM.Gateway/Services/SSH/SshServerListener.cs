@@ -101,7 +101,7 @@ namespace HIM.Gateway.Services.SSH
 
             _logger.LogInformation(
                 "[Gateway] {Timestamp:yyyy-MM-dd HH:mm:ss} UTC | SSH listener started | " +
-                "Port: {Port} | MaxConnections: {Max} | IdleTimeout: {Idle}m",
+                "Port: {Port} | MaxConnections: {Max} | IdleTimeout: {Idle}s",
                 DateTime.UtcNow, _settings.Port, _settings.MaxConnections, _settings.IdleTimeoutSeconds);
 
             try

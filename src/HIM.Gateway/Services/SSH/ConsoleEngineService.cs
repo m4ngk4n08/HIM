@@ -64,7 +64,7 @@ namespace HIM.Gateway.Services.SSH
             // CancelAfter() does NOT reset an existing timer — calling it again on the
             // same CTS only adds a second deadline; the first one still fires at the
             // original absolute time. Reusing a single CTS therefore causes the session
-            // to be killed after IdleTimeoutMinutes from the *start* of the session
+            // to be killed after IdleTimeoutSeconds from the *start* of the session
             // regardless of activity, producing "Cannot send more data after EOF".
             CancellationTokenSource? timeoutCts = null;
 

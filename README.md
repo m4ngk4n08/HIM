@@ -69,7 +69,7 @@ To operate safely on standard Port 22, the gateway incorporates a highly hardene
 | **Layer 5** | **Per-IP Concurrency** | Interlocked session tracking that rejects clients attempting to hold multiple active connections. |
 | **Layer 6** | **Handshake Timeout** | Enforces a strict **15-second** disarmable cancellation token during the initial cryptographic negotiation. |
 | **Layer 7** | **Pre-Shell Negotiation Timeout** | Enforces a **15-second** countdown post-negotiation. If a bot completes the handshake but fails to request a shell channel, it is forcibly disconnected [1.2.7]. |
-| **Layer 8** | **Interactive Idle Timeout** | A keyboard-driven idle timer (set to **30 minutes**) managed inside the TUI engine that resets on every user keystroke. |
+| **Layer 8** | **Interactive Idle Timeout** | A keyboard-driven idle timer (set to **300 seconds / 5 minutes**) managed inside the TUI engine that resets on every user keystroke. |
 
 ---
 
@@ -99,10 +99,10 @@ When a bot successfully negotiates the SSH transport layer but attempts to run f
 
 ## 🛠️ Tech Stack
 - **Language:** C# (.NET 10)
-- **SSH Protocol:** `Microsoft.DevTunnels.Ssh` (v3.9.3)
+- **SSH Protocol:** `Microsoft.DevTunnels.Ssh` (v3.12.29)
 - **UI:** `Spectre.Console`
 - **AI Orchestration:** Custom RAG orchestration (Manual pipeline).
-- **LLM/Embeddings:** Llama3 & `all-minilm` (via Ollama).
+- **LLM/Embeddings:** `gemini-3.1-flash-lite` (Gemini) for chat, local in-process ONNX `all-minilm-l6-v2` for embeddings — no external call.
 - **Performance:** `System.Numerics` (SIMD) for vector operations.
 - **Security:** `nftables` (kernel-level packet filtering), Fail2Ban (journald integration).
 

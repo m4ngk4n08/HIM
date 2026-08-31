@@ -14,7 +14,7 @@ namespace HIM.Gateway.Models
             public int MaxConnections { get; set; } = 20;
 
             // ── Idle / Session ────────────────────────────────────────────────
-            /// <summary>Minutes before an idle session is forcefully terminated.</summary>
+            /// <summary>Seconds before an idle session is forcefully terminated.</summary>
             public int IdleTimeoutSeconds { get; set; } = 300;
 
             // ── Per-IP Rate Limit (Layer 3) ───────────────────────────────────
