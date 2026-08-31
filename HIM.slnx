@@ -2,7 +2,6 @@
   <Folder Name="/src/">
     <Project Path="src/HIM.Gateway/HIM.Gateway.csproj" />
     <Project Path="src/HIM.AiService/HIM.AiService.csproj" />
-    <Project Path="src/HIM.Shared/HIM.Shared.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/HIM.AiService.Tests/HIM.AiService.Tests.csproj" />
