@@ -1,0 +1,27 @@
+name: Build and Test
+
+on:
+    push:
+    pull_request:
+
+permissions:
+    contents: read
+
+jobs:
+    build-and-test:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout Repository
+              uses: actions/checkout@v4
+
+            - name: Setup .NET
+              uses: actions/setup-dotnet@v4
+              with:
+                dotnet-version: '10.0.x'
+
+            - name: Build
+              run: dotnet build HIM.slnx
+
+            - name: Test
+              run: dotnet test HIM.slnx

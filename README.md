@@ -106,6 +106,13 @@ When a bot successfully negotiates the SSH transport layer but attempts to run f
 - **Performance:** `System.Numerics` (SIMD) for vector operations.
 - **Security:** `nftables` (kernel-level packet filtering), Fail2Ban (journald integration).
 
+## 💻 Local Development
+Neither service ships an `appsettings.json` (it's git-ignored, and CI needs no secrets to build or test). To run either service locally:
+
+1. Copy the template next to the real file it configures — `src/HIM.Gateway/appsettings.Template.json` → `src/HIM.Gateway/appsettings.json`, and `src/HIM.AiService/appsettings.Template.json` → `src/HIM.AiService/appsettings.json` — and fill in the secrets, or skip the copy and set the same keys with `dotnet user-secrets` from each project directory.
+2. Run each service from its own project directory (`dotnet run` inside `src/HIM.Gateway` / `src/HIM.AiService`), not the repo root — `appsettings.json` loads relative to `ContentRoot`, so running from the root silently falls back to class defaults. The gateway's `launchSettings.json` sets `DOTNET_ENVIRONMENT=Development`, which is what makes `dotnet user-secrets` load at all.
+3. **`AiServiceSettings:SharedSecret` (Gateway) and `AiSettings:Security:SharedSecret` (AiService) must be set to the same value.** A mismatch doesn't stop either service from starting — it just makes every AI call 401, which is a confusing failure to debug. The AI service also fails closed on startup if its shared secret is unset at all.
+
 ## 🛡️ Host Hardening & Production Setup
 To run this application in a production Internet-facing environment, the host VPS must be configured to prevent brute-forcing and connection slot exhaustion. 
 
