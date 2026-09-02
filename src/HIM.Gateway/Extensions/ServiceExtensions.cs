@@ -36,6 +36,9 @@ namespace HIM.Gateway.Extensions
             // ── Connection gates: registration order is evaluation order ──
             services.AddConnectionGate<GlobalFloodGate>();
             services.AddConnectionGate<IpBanGate>();
+            services.AddConnectionGate<PerIpRateGate>();
+            services.AddConnectionGate<PerIpConcurrencyGate>();
+            services.AddSingleton<IConnectionSlotGate>(sp => sp.GetRequiredService<PerIpConcurrencyGate>());
 
             // Persists high scores to a shared game-scores.json on disk - the leaderboard
             // is meant to be shared across every visitor, so Singleton is correct here.
