@@ -274,6 +274,10 @@
     {
       "question": "Are you open to relocation or onsite work?",
       "answer": "I am based in Taguig City, Philippines. I strongly prefer remote work because it lets me focus deeply on writing code without office distractions. I am open to hybrid arrangements in Metro Manila if the meeting load is light and the team respects deep-focus time, but I am not looking to relocate."
+    },
+    {
+      "question": "Tell me more about you. Tell me more about you. Who are you? Tell me about yourself. What do you do? What exactly do you do?",
+      "answer": "I'm Angelo T. Davales, a full stack .NET developer based in the Philippines, currently building HIM and Project Loom v2 full time."
     }
   ]
 }
