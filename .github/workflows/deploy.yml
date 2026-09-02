@@ -49,24 +49,71 @@ jobs:
             - name: Checkout Repository
               uses: actions/checkout@v4
 
-            - name: Copy docker-compose.yml to VPS (does not touch .env)
-              uses: appleboy/scp-action@v0.1.7
-              with:
-                host: ${{ secrets.VPS_IP }}
-                username: root
-                key: ${{ secrets.SSH_PRIVATE_KEY }}
-                port: 43829
-                source: docker-compose.yml
-                target: ~/him-portfolio
+            # Replaces appleboy/scp-action + appleboy/ssh-action with the runner's own OpenSSH
+            # client. Those two consistently failed at the second step: scp connected and
+            # authenticated fine (sshd logged six successful publickey auths), then the ssh step
+            # died on "dial tcp ***:43829: i/o timeout" for a connection sshd never logged at all.
+            # fail2ban (0 banned), iptables rate limiting (no such rule) and credentials were all
+            # ruled out with evidence on 2026-09-02, so the remaining difference was the actions
+            # themselves. Doing it directly also drops the connection count from seven to two.
+            #
+            # If this still times out, the -v output below says how far it got, which the actions
+            # never did - so a failure here is still more useful than the old one.
+            - name: Deploy to VPS over SSH
+              env:
+                  SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+                  VPS_IP: ${{ secrets.VPS_IP }}
+                  VPS_HOST_KEY: ${{ secrets.VPS_HOST_KEY }}
+                  SSH_PORT: '43829'
+              run: |
+                  set -euo pipefail
 
-            - name: Execute Remote Deployment via SSH
-              uses: appleboy/ssh-action@v1.0.3
-              with:
-                host: ${{ secrets.VPS_IP }}
-                username: root
-                key: ${{ secrets.SSH_PRIVATE_KEY }}
-                port: 43829
-                script: |
-                    cd ~/him-portfolio
-                    docker compose pull
-                    docker compose up -d
+                  mkdir -p ~/.ssh
+                  chmod 700 ~/.ssh
+                  printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+                  chmod 600 ~/.ssh/deploy_key
+
+                  # Prefer a pinned host key (set the VPS_HOST_KEY secret to the output of
+                  # `ssh-keyscan -p 43829 <ip>`), and fall back to trust-on-first-use. The
+                  # replaced actions verified nothing at all, so either branch is stricter
+                  # than what this workflow did before.
+                  if [ -n "${VPS_HOST_KEY:-}" ]; then
+                      printf '%s\n' "$VPS_HOST_KEY" > ~/.ssh/known_hosts
+                      echo "Host key: pinned from VPS_HOST_KEY secret"
+                  else
+                      ssh-keyscan -p "$SSH_PORT" "$VPS_IP" > ~/.ssh/known_hosts 2>/dev/null || true
+                      echo "Host key: trust-on-first-use via ssh-keyscan (set VPS_HOST_KEY to pin)"
+                  fi
+                  chmod 600 ~/.ssh/known_hosts
+
+                  # ssh-keyscan can exit 0 having written nothing (seen on this project's own
+                  # port 22, where the gateway's bot defense drops unauthenticated probes). An
+                  # empty known_hosts would fail later as an opaque "Host key verification
+                  # failed", so say plainly what actually went wrong.
+                  if [ ! -s ~/.ssh/known_hosts ]; then
+                      echo "::error::No host key for $VPS_IP:$SSH_PORT - ssh-keyscan returned nothing and VPS_HOST_KEY is unset."
+                      exit 1
+                  fi
+
+                  SSH_OPTS="-i $HOME/.ssh/deploy_key -p $SSH_PORT \
+                      -o StrictHostKeyChecking=yes \
+                      -o UserKnownHostsFile=$HOME/.ssh/known_hosts \
+                      -o ConnectTimeout=30 \
+                      -o ServerAliveInterval=15"
+
+                  # Copy the compose file. Deliberately does not touch .env, which is
+                  # hand-maintained on the server and holds the API keys and shared secret.
+                  scp $SSH_OPTS docker-compose.yml "root@$VPS_IP:~/him-portfolio/docker-compose.yml"
+
+                  # -v so a failure shows how far the connection got, rather than a bare timeout.
+                  ssh -v $SSH_OPTS "root@$VPS_IP" '
+                      set -euo pipefail
+                      cd ~/him-portfolio
+                      docker compose pull
+                      docker compose up -d
+                      docker compose ps
+                  '
+
+            - name: Remove deploy key
+              if: always()
+              run: rm -f ~/.ssh/deploy_key
