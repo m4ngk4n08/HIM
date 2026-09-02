@@ -22,9 +22,12 @@ namespace HIM.AiService.Tests;
 /// </summary>
 public class CorrelationAndErrorHandlingTests
 {
+    // Thread-safe: ASP.NET's own hosting/framework logging can emit concurrently with the test
+    // enumerating Events (e.g. from a background request-processing thread), and a plain List
+    // throws "Collection was modified" under that race.
     private class ListSink : ILogEventSink
     {
-        public List<LogEvent> Events { get; } = new();
+        public System.Collections.Concurrent.ConcurrentBag<LogEvent> Events { get; } = new();
         public void Emit(LogEvent logEvent) => Events.Add(logEvent);
     }
 

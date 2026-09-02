@@ -20,5 +20,14 @@ namespace HIM.AiService.Extensions
             result = PhoneRegex.Replace(result, "[REDACTED_PHONE]");
             return result;
         }
+
+        // SEC-02: phone-only redaction for the knowledge-base ingestion boundary. Redact() above
+        // also strips email, which is right for logs but wrong here - the contact email is the
+        // deliberate public channel and must stay retrievable by RAG.
+        public static string RedactPhone(string input)
+        {
+            if (string.IsNullOrEmpty(input)) return input;
+            return PhoneRegex.Replace(input, "[REDACTED_PHONE]");
+        }
     }
 }

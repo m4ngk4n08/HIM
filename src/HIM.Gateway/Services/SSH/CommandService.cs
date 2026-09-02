@@ -149,7 +149,10 @@ public class CommandService : ICommandService
 
         try
         {
-            var responsesStream = _aiClientService.GetAiResponseAsync(question, ct, sessionId);
+            // SEC-02: the egress filter is the last boundary before the visitor - redact here,
+            // on the stream that actually reaches the console, not only on what gets logged below.
+            var responsesStream = _aiClientService.GetAiResponseAsync(question, ct, sessionId)
+                .RedactPiiAsync(ct);
             await using var enumerator = responsesStream.GetAsyncEnumerator(ct);
 
             bool hasData = await console.Status()

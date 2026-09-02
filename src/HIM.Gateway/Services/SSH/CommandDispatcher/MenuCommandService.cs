@@ -1,4 +1,5 @@
-﻿using HIM.Gateway.Models.Knowledge;
+﻿using HIM.Gateway.Extensions;
+using HIM.Gateway.Models.Knowledge;
 using HIM.Gateway.Services.SSH.Interfaces;
 using HIM.Gateway.Services.SSH.Interfaces.ICommandDispatcher;
 using Spectre.Console;
@@ -107,7 +108,10 @@ namespace HIM.Gateway.Services.SSH.CommandDispatcher
                     );
                 foreach (var highlights in job.Highlights)
                 {
-                    node.AddNode(highlights.EscapeMarkup());
+                    // SEC-02: free-text prose from the knowledge base, rendered directly - the
+                    // same egress boundary the AI stream gets, in case a phone-shaped string is
+                    // ever reintroduced here.
+                    node.AddNode(SanitizerExtension.RedactPhone(highlights).EscapeMarkup());
                 }
             }
 
@@ -137,7 +141,7 @@ namespace HIM.Gateway.Services.SSH.CommandDispatcher
         {
             var p = data.PersonalInfo;
             var layout = new Rows(
-                new Markup($"[cyan]{p.Summary.EscapeMarkup()}[/]\n"),
+                new Markup($"[cyan]{SanitizerExtension.RedactPhone(p.Summary).EscapeMarkup()}[/]\n"),
                 new Rule().RuleStyle("grey"),
                 new Grid()
                     .AddColumn().AddColumn()

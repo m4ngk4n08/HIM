@@ -1,3 +1,4 @@
+using HIM.AiService.Extensions;
 using HIM.AiService.Models.AI;
 using HIM.AiService.Services.AI.Interface;
 using Microsoft.Extensions.Logging;
@@ -62,6 +63,13 @@ namespace HIM.AiService.Services.AI
             using var doc = JsonDocument.Parse(sourceBytes);
             var rawChunks = new List<string>();
             FlattenJson(doc.RootElement, string.Empty, rawChunks);
+
+            // SEC-02: redact PII-shaped content before it ever reaches the embedding model or
+            // the vector store - the source knowledge base should never carry a phone number
+            // again, but this closes the boundary regardless of how one gets in. Email is left
+            // alone; it's the deliberate public contact channel and must stay retrievable.
+            for (int i = 0; i < rawChunks.Count; i++)
+                rawChunks[i] = SanitizerExtension.RedactPhone(rawChunks[i]);
 
             foreach (var text in rawChunks)
             {
