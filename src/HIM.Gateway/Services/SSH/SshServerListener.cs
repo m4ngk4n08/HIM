@@ -471,7 +471,9 @@ namespace HIM.Gateway.Services.SSH
             }
         }
 
-        private void HandleShellChannelAsync(SshChannel channel, string ipAddress, CancellationToken sessionToken, CancellationTokenSource negotiationCts)
+        // Internal (rather than private) so tests can drive channel-request handling directly
+        // over a real SshChannel without needing the full TCP accept loop.
+        internal void HandleShellChannelAsync(SshChannel channel, string ipAddress, CancellationToken sessionToken, CancellationTokenSource negotiationCts)
         {
             var channelCts = CancellationTokenSource.CreateLinkedTokenSource(sessionToken);
             channel.Closed += (_, _) => { try { channelCts.Cancel(); } catch { } };
@@ -529,6 +531,23 @@ namespace HIM.Gateway.Services.SSH
                                 channel, terminalWidth, terminalHeight, channelCts.Token,
                                 e2 => Volatile.Write(ref engine, e2)));
                         }
+                        break;
+
+                    // Benign channel requests OpenSSH clients send unprompted. None of these
+                    // constitute an execution attempt, so accept-and-ignore rather than tearing
+                    // down the session: "env" is the load-bearing one - OpenSSH's stock
+                    // ssh_config on Ubuntu/Debian/macOS carries "SendEnv LANG LC_*", sent right
+                    // after "pty-req" and before "shell", so refusing it kills the session before
+                    // the TUI ever starts. We still discard the payload; we just don't apply it.
+                    // "signal" is deliberately absent: the SSH library answers it before this
+                    // handler runs and closes the session either way, verified by removing the
+                    // case and observing identical behaviour. Listing it would claim a guarantee
+                    // this switch cannot make.
+                    case "env":
+                    case "eow@openssh.com":
+                    case "xon-xoff":
+                    case "break":
+                        e.IsAuthorized = true;
                         break;
 
                     default:
