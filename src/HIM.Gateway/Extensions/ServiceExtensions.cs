@@ -1,5 +1,6 @@
 using HIM.Gateway.Services.SSH;
 using HIM.Gateway.Services.SSH.CommandDispatcher;
+using HIM.Gateway.Services.SSH.Gates;
 using HIM.Gateway.Services.SSH.Game;
 using HIM.Gateway.Services.SSH.Game.TheGame;
 using HIM.Gateway.Services.SSH.Interfaces;
@@ -26,10 +27,15 @@ namespace HIM.Gateway.Extensions
         public static IServiceCollection AddService(this IServiceCollection services)
         {
             // ── Singletons: process-wide state, safe to share across every visitor ──
+            services.AddSingleton(TimeProvider.System);
             services.AddSingleton<IHostKeyService, HostKeyService>();
             services.AddSingleton<IAuthenticationService, GuestAuthenticationService>();
             services.AddSingleton<ISshServerListener, SshServerListener>();
             services.AddSingleton<IIpBanService, IpBanService>();
+
+            // ── Connection gates: registration order is evaluation order ──
+            services.AddConnectionGate<GlobalFloodGate>();
+            services.AddConnectionGate<IpBanGate>();
 
             // Persists high scores to a shared game-scores.json on disk - the leaderboard
             // is meant to be shared across every visitor, so Singleton is correct here.
