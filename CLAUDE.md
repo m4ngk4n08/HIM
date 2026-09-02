@@ -21,6 +21,10 @@ The `plans/` directory is the project's working memory. **`plans/HANDOFF.md` is 
 read it first in a new session for current state, what is committed vs. pushed vs. deployed, and
 the reasoning behind recent decisions. Individual task briefs live alongside it.
 
+`plans/` is **git-ignored on purpose**, so it exists only in a local working copy — a fresh clone
+has no `plans/` at all. If it is missing, nothing is broken and nothing was lost; ask the user for
+the handoff rather than assuming the project has no history.
+
 ## Working agreement
 
 Two models work in this repo. Sonnet implements a brief from `plans/`; Opus writes the briefs and
@@ -145,9 +149,16 @@ These have bitten before; check them before changing related code.
   container logs and bans IPs on the reason strings (`"GlobalFloodLimit"`, `"Banned"`,
   `"RateOrConcurrentLimit"`). Renaming one silently changes who gets banned. `PerIpRateGate` (L4)
   and `PerIpConcurrencyGate` (L5) share `"RateOrConcurrentLimit"` deliberately.
-- **Everything network-derived is sanitized before logging.** Usernames, request types, etc. go
-  through `SanitizerExtension` to strip CR/LF and ANSI escapes — otherwise a bot can forge log lines
-  and steer Fail2Ban. New log statements over untrusted input must sanitize too.
+- **Everything network-derived is stripped of control characters before logging.** SSH usernames
+  and channel request types go through `SshServerListener.SanitizeLogInput`, which truncates and
+  removes CR/LF and ANSI escapes — otherwise a bot can forge whole log lines and steer Fail2Ban into
+  banning someone else. New log statements over untrusted input must do the same. Note the method is
+  currently `private` to `SshServerListener`; using it from another class means promoting or moving
+  it first, not reaching for something else.
+  **`SanitizerExtension` is not that tool** and will not close this hole. It redacts emails
+  (`Redact`) and phone numbers (`Redact`, `RedactPhone`) for privacy at the egress and logging
+  boundaries; it does not touch CR/LF or escape sequences. The two jobs are unrelated — do not
+  substitute one for the other on the strength of the name.
 - **Connection-gate registration order is evaluation order.** In `ServiceExtensions.AddService`:
   `GlobalFloodGate` (L3) → `IpBanGate` (L1) → `PerIpRateGate` (L4) → `PerIpConcurrencyGate` (L5),
   pinned by `ConnectionGatePipelineTests`. L4 enqueues its history entry *before* L5's concurrency
