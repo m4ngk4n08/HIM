@@ -5,6 +5,7 @@ using HIM.Gateway.Services.SSH.Game.TheGame;
 using HIM.Gateway.Services.SSH.Interfaces;
 using HIM.Gateway.Services.SSH.Interfaces.ICommandDispatcher;
 using HIM.Gateway.Services.SSH.Interfaces.IGame;
+using HIM.Gateway.Services.SSH.Interfaces.IGates;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace HIM.Gateway.Extensions
@@ -70,6 +71,21 @@ namespace HIM.Gateway.Extensions
             services.AddScoped<IGameService, RegexQuest>();
             services.AddScoped<IGameService, CodeDebugger>();
             services.AddScoped<IGameService, PacManGame>();
+            return services;
+        }
+
+        /// <summary>
+        /// Registers a connection gate both under its concrete type and as an IConnectionGate,
+        /// resolving to the same singleton instance either way. Registration order is evaluation
+        /// order — IEnumerable&lt;IConnectionGate&gt; preserves the order services were added in
+        /// Microsoft.Extensions.DependencyInjection, pinned by
+        /// ConnectionGatePipelineTests.RegistrationOrder_IsEvaluationOrder.
+        /// </summary>
+        public static IServiceCollection AddConnectionGate<TGate>(this IServiceCollection services)
+            where TGate : class, IConnectionGate
+        {
+            services.AddSingleton<TGate>();
+            services.AddSingleton<IConnectionGate>(sp => sp.GetRequiredService<TGate>());
             return services;
         }
     }
