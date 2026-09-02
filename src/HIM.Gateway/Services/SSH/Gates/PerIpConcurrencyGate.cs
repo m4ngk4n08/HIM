@@ -50,10 +50,37 @@ namespace HIM.Gateway.Services.SSH.Gates
 
         public void Release(ConnectionContext ctx) => Decrement(ctx.IpAddress);
 
+        /// <summary>Test-only window into _activeConnectionsPerIp's size — proves the leak fix.</summary>
+        internal int TrackedIpCount => _activeConnectionsPerIp.Count;
+
+        /// <summary>
+        /// Decrements the IP's active count, removing the entry entirely once it reaches zero so
+        /// a public port under continuous scanning doesn't accumulate one permanent zero-valued
+        /// entry per unique IP for the life of the process. Uses TryRemove(KeyValuePair) rather
+        /// than a plain TryRemove(key) so a concurrent Evaluate racing this decrement (incrementing
+        /// the same entry between our read and the remove) cannot have its increment silently
+        /// dropped - if the observed value has changed by the time we act, we retry instead of
+        /// removing or overwriting a value we no longer know is stale.
+        /// </summary>
         private void Decrement(string ipAddress)
         {
             if (string.IsNullOrEmpty(ipAddress)) return;
-            _activeConnectionsPerIp.AddOrUpdate(ipAddress, 0, (_, val) => Math.Max(0, val - 1));
+
+            while (_activeConnectionsPerIp.TryGetValue(ipAddress, out var current))
+            {
+                var next = current - 1;
+                if (next <= 0)
+                {
+                    if (_activeConnectionsPerIp.TryRemove(new KeyValuePair<string, int>(ipAddress, current)))
+                        return;
+                }
+                else if (_activeConnectionsPerIp.TryUpdate(ipAddress, next, current))
+                {
+                    return;
+                }
+                // Another thread changed the entry between our read and our write - retry with
+                // the now-current value rather than clobbering a concurrent increment/decrement.
+            }
         }
     }
 }

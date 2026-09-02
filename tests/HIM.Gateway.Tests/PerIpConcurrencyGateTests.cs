@@ -4,6 +4,7 @@ using HIM.Gateway.Services.SSH.Interfaces;
 using HIM.Gateway.Services.SSH.Interfaces.IGates;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using System.Linq;
 
 namespace HIM.Gateway.Tests;
 
@@ -79,5 +80,52 @@ public class PerIpConcurrencyGateTests
         gate.Release(ctx);
 
         Assert.True(gate.Evaluate(ctx).IsAllowed);
+    }
+
+    [Fact]
+    public void ManyConnectionsUpAndDown_ForOneIp_LeavesTheDictionaryEmpty()
+    {
+        // 16E: DecrementActiveConnection used to leave a permanent zero-valued entry per unique
+        // IP - unbounded growth under continuous scanning. N acquire/release cycles for one IP
+        // must leave no entry behind at all, not a zero-valued one.
+        var (gate, _) = CreateGate(maxConcurrent: 5);
+        var ctx = new ConnectionContext("203.0.113.7");
+
+        for (var i = 0; i < 50; i++)
+        {
+            Assert.True(gate.Evaluate(ctx).IsAllowed);
+            gate.Release(ctx);
+        }
+
+        Assert.Equal(0, gate.TrackedIpCount);
+    }
+
+    [Fact]
+    public async Task ConcurrentAcquireDuringRelease_DoesNotLoseTheSlot()
+    {
+        // The TryRemove(KeyValuePair) fix must retry rather than clobber when an Evaluate races
+        // a Release for the same IP - otherwise a concurrent increment between Release's read and
+        // its remove/update could vanish. Many threads each doing their own acquire-then-release
+        // pair concurrently, for the same IP: every pair nets to zero, so if no update is ever
+        // silently dropped, the dictionary converges to exactly no entry once all pairs finish -
+        // not a stale positive count and not a stale zero-valued entry.
+        var (gate, _) = CreateGate(maxConcurrent: 10_000);
+        var ctx = new ConnectionContext("203.0.113.7");
+
+        const int threadCount = 16;
+        const int pairsPerThread = 500;
+
+        var tasks = Enumerable.Range(0, threadCount).Select(_ => Task.Run(() =>
+        {
+            for (var i = 0; i < pairsPerThread; i++)
+            {
+                Assert.True(gate.Evaluate(ctx).IsAllowed);
+                gate.Release(ctx);
+            }
+        }));
+
+        await Task.WhenAll(tasks);
+
+        Assert.Equal(0, gate.TrackedIpCount);
     }
 }
