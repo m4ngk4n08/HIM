@@ -95,7 +95,11 @@ jobs:
                       exit 1
                   fi
 
-                  SSH_OPTS="-i $HOME/.ssh/deploy_key -p $SSH_PORT \
+                  # The port flag differs between the tools and must NOT sit in the shared
+                  # options: ssh takes -p, but for scp -p means "preserve timestamps" and
+                  # takes no argument, so the port is read as a source filename -
+                  # "scp: stat local 43829: No such file or directory".
+                  COMMON_OPTS="-i $HOME/.ssh/deploy_key \
                       -o StrictHostKeyChecking=yes \
                       -o UserKnownHostsFile=$HOME/.ssh/known_hosts \
                       -o ConnectTimeout=30 \
@@ -103,10 +107,10 @@ jobs:
 
                   # Copy the compose file. Deliberately does not touch .env, which is
                   # hand-maintained on the server and holds the API keys and shared secret.
-                  scp $SSH_OPTS docker-compose.yml "root@$VPS_IP:~/him-portfolio/docker-compose.yml"
+                  scp -P "$SSH_PORT" $COMMON_OPTS docker-compose.yml "root@$VPS_IP:~/him-portfolio/docker-compose.yml"
 
                   # -v so a failure shows how far the connection got, rather than a bare timeout.
-                  ssh -v $SSH_OPTS "root@$VPS_IP" '
+                  ssh -v -p "$SSH_PORT" $COMMON_OPTS "root@$VPS_IP" '
                       set -euo pipefail
                       cd ~/him-portfolio
                       docker compose pull
