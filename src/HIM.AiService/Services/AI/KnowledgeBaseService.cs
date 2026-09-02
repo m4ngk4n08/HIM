@@ -12,7 +12,17 @@ namespace HIM.AiService.Services.AI
         // Distinguishes the header-carrying cache format from the legacy headerless one
         // (whose first 4 bytes are just a chunk count). Never migrate a headerless file.
         private const int CacheMagic = unchecked((int)0xDEC0DE01);
-        private const int CacheSchemaVersion = 1;
+        // Bumped 1 -> 2 for Task 13's FlattenJson rewrite: the source JSON bytes don't change
+        // when only the flattening logic changes, so without this the old (wrongly-chunked)
+        // cache would keep loading and the fix would silently do nothing.
+        private const int CacheSchemaVersion = 2;
+
+        // Chosen well above the largest legitimate consolidated entry in the current knowledge
+        // base (~90 words for a stress_test_qna entry) and well below the point where a chunk's
+        // real token count (see EmbeddingService.GetNormalizeLocalEmbeddingAsync) risks the
+        // ONNX tokenizer's 512-token hard cap. The two project entries (589/650 words) are the
+        // only ones that exceed it today, which is exactly what should split, not truncate.
+        private const int MaxConsolidatedWords = 200;
 
         private readonly List<KnowledgeChunks> _chunks = new();
         private readonly IEmbeddingService _embeddingService;
@@ -195,11 +205,7 @@ namespace HIM.AiService.Services.AI
             switch (element.ValueKind)
             {
                 case JsonValueKind.Object:
-                    foreach (var prop in element.EnumerateObject())
-                    {
-                        string newPrefix = string.IsNullOrEmpty(prefix) ? prop.Name : $"{prefix} {prop.Name}";
-                        FlattenJson(prop.Value, newPrefix, chunks);
-                    }
+                    FlattenObject(element, prefix, chunks);
                     break;
 
                 case JsonValueKind.Array:
@@ -211,29 +217,21 @@ namespace HIM.AiService.Services.AI
                     {
                         chunks.Add($"{prefix}: {string.Join(", ", items.Select(x => x.ToString()))}");
                     }
-                    // 2. If it's a list of OBJECTS (like Experience or Projects), consolidate each object!
+                    // 2. If it's a list of OBJECTS (like Experience or Projects), consolidate each object -
+                    // or split it by field if consolidating would risk truncation (see FlattenObject).
                     else
                     {
                         foreach (var item in items)
                         {
                             if (item.ValueKind == JsonValueKind.Object)
                             {
-                                // CONSOLIDATION LOGIC:
-                                // Turn the whole job entry into one single high-context sentence.
-                                var builder = new List<string>();
-                                foreach (var prop in item.EnumerateObject())
-                                {
-                                    if (prop.Value.ValueKind == JsonValueKind.Array)
-                                    {
-                                        var subItems = string.Join("; ", prop.Value.EnumerateArray().Select(v => v.ToString()));
-                                        builder.Add($"{prop.Name}: {subItems}");
-                                    }
-                                    else
-                                    {
-                                        builder.Add($"{prop.Name}: {prop.Value}");
-                                    }
-                                }
-                                chunks.Add($"{prefix}: {string.Join(". ", builder)}");
+                                // Tag each item's chunks with its own identity (e.g. a project's
+                                // "name") so a split-by-field entry stays attributable to the right
+                                // item - every item in this array otherwise shares the same prefix.
+                                var itemPrefix = item.TryGetProperty("name", out var nameProp) && nameProp.ValueKind == JsonValueKind.String
+                                    ? $"{prefix} [{nameProp.GetString()}]"
+                                    : prefix;
+                                FlattenObject(item, itemPrefix, chunks);
                             }
                             else
                             {
@@ -250,7 +248,56 @@ namespace HIM.AiService.Services.AI
             }
         }
 
-        public async Task<List<KnowledgeChunks>> SearchAsync(float[] queryEmbedding, int topK = 3)
+        /// <summary>
+        /// Consolidates an object into one high-context sentence (the original behavior) when
+        /// that sentence stays comfortably under <see cref="MaxConsolidatedWords"/>. Otherwise
+        /// splits it into one chunk per top-level field instead, so a large entry (e.g. a project
+        /// with nested architecture/achievements/security sections) never becomes a single chunk
+        /// long enough for EmbeddingService's 512-token cap to silently truncate the back half.
+        /// </summary>
+        private void FlattenObject(JsonElement obj, string prefix, List<string> chunks)
+        {
+            var candidate = ConsolidateObject(obj);
+            if (CountWords(candidate) <= MaxConsolidatedWords)
+            {
+                chunks.Add($"{prefix}: {candidate}");
+                return;
+            }
+
+            foreach (var prop in obj.EnumerateObject())
+            {
+                var fieldPrefix = string.IsNullOrEmpty(prefix) ? prop.Name : $"{prefix} {prop.Name}";
+                FlattenJson(prop.Value, fieldPrefix, chunks);
+            }
+        }
+
+        private static string ConsolidateObject(JsonElement obj)
+        {
+            var parts = new List<string>();
+            foreach (var prop in obj.EnumerateObject())
+            {
+                switch (prop.Value.ValueKind)
+                {
+                    case JsonValueKind.Array:
+                        var subItems = string.Join("; ", prop.Value.EnumerateArray().Select(v =>
+                            v.ValueKind == JsonValueKind.Object ? ConsolidateObject(v) : v.ToString()));
+                        parts.Add($"{prop.Name}: {subItems}");
+                        break;
+                    case JsonValueKind.Object:
+                        parts.Add($"{prop.Name}: {ConsolidateObject(prop.Value)}");
+                        break;
+                    default:
+                        parts.Add($"{prop.Name}: {prop.Value}");
+                        break;
+                }
+            }
+            return string.Join(". ", parts);
+        }
+
+        private static int CountWords(string s) =>
+            s.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;
+
+        public async Task<List<KnowledgeChunks>> SearchAsync(float[] queryEmbedding, int topK = 3, float minScore = float.NegativeInfinity)
         {
             if (!_chunks.Any())
             {
@@ -260,18 +307,24 @@ namespace HIM.AiService.Services.AI
             if (!_chunks.Any()) return new List<KnowledgeChunks>();
 
             // Use PriorityQueue for O(N log k)
-            var pq = new PriorityQueue<KnowledgeChunks, float>();
+            var pq = new PriorityQueue<(KnowledgeChunks Chunk, float Score), float>();
 
             foreach (var chunk in _chunks)
             {
                 float similarity = _vectorsearchService.CalculateDotProduct(queryEmbedding, chunk.Vector);
-                pq.Enqueue(chunk, similarity); // Negative because PriorityQueue is a Min-Heap by default
+                pq.Enqueue((chunk, similarity), similarity); // Min-heap: the smallest score is the one Dequeue drops below
 
                 if (pq.Count > topK) pq.Dequeue();
             }
 
+            // topK is only an upper bound: a chunk below minScore is dropped even if it made
+            // the top-K cut, so an irrelevant match never rides along just to fill the quota.
             var results = new List<KnowledgeChunks>();
-            while (pq.Count > 0) results.Insert(0, pq.Dequeue());
+            while (pq.Count > 0)
+            {
+                var (chunk, score) = pq.Dequeue();
+                if (score >= minScore) results.Insert(0, chunk);
+            }
             return results;
         }
     }

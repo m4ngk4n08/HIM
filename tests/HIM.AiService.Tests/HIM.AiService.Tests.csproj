@@ -24,4 +24,18 @@
     <ProjectReference Include="..\..\src\HIM.AiService\HIM.AiService.csproj" />
   </ItemGroup>
 
+  <!-- Linked (not copied) so the retrieval-quality and token-limit tests exercise the real
+       tokenizer/model/knowledge base instead of a synthetic stand-in. -->
+  <ItemGroup>
+    <None Include="..\..\src\HIM.AiService\Models\AllMiniLML6V2\model.onnx" Link="Models\AllMiniLML6V2\model.onnx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\..\src\HIM.AiService\Models\AllMiniLML6V2\vocab.txt" Link="Models\AllMiniLML6V2\vocab.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\..\src\HIM.AiService\knowledge-base.json" Link="knowledge-base.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>
