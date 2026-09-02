@@ -21,16 +21,29 @@ namespace HIM.Gateway.Services.SSH
     /// <summary>
     /// TCP/SSH gateway with 8-layer bot defense.
     ///
-    /// Defense layers (in order of evaluation — cheapest checks first):
+    /// Only four of the eight layers are gate-shaped decisions (allow/reject at accept time);
+    /// those four live in Services/SSH/Gates/ as IConnectionGate implementations, registered in
+    /// ServiceExtensions.AddService in evaluation order. The other four are not gates — they are
+    /// either the shared rejection action every gate feeds, or per-session cancellation tokens
+    /// armed after the socket is already accepted:
     /// ──────────────────────────────────────────────────────────────────
-    ///  Layer 1 │ IP BanList          │ Lock-free ConcurrentDictionary read
-    ///  Layer 2 │ Tarpit on reject    │ Bounded concurrent tarpitting thread guard
-    ///  Layer 3 │ Global flood guard  │ CAS-based token bucket, zero locks
-    ///  Layer 4 │ Per-IP rate limit   │ Lock-free sliding window via ConcurrentQueue sharding
-    ///  Layer 5 │ Per-IP concurrency  │ Interlocked counter via ConcurrentDictionary
-    ///  Layer 6 │ Handshake Timeout   │ Linked CancellationTokenSource with CancelAfter
-    ///  Layer 7 │ Negotiation Timeout │ Linked countdown enforcing shell channel request
-    ///  Layer 8 │ Idle timeout        │ Linked CancellationTokenSource with CancelAfter (TUI)
+    ///  Layer 1 │ IP BanList          │ Gates/IpBanGate.cs — Lock-free ConcurrentDictionary read
+    ///  Layer 2 │ Tarpit on reject    │ SshServerListener.TarpitAndReject — the uniform rejection
+    ///          │                     │ action every gate's result feeds; not itself a decision
+    ///  Layer 3 │ Global flood guard  │ Gates/GlobalFloodGate.cs — CAS-based token bucket
+    ///  Layer 4 │ Per-IP rate limit   │ Gates/PerIpRateGate.cs — Lock-free sliding window
+    ///  Layer 5 │ Per-IP concurrency  │ Gates/PerIpConcurrencyGate.cs — Interlocked counter via
+    ///          │                     │ ConcurrentDictionary; the only gate with acquire/release
+    ///  Layer 6 │ Handshake Timeout   │ SshServerListener.HandleConnectionAsync — a linked CTS
+    ///          │                     │ (handshakeCts) armed after accept, disarmed on success
+    ///  Layer 7 │ Negotiation Timeout │ SshServerListener.HandleConnectionAsync — a linked CTS
+    ///          │                     │ (negotiationCts) enforcing the shell channel request
+    ///  Layer 8 │ Idle timeout        │ ConsoleEngineService.HandleInteractionLoopAsync — a
+    ///          │                     │ per-read CancelAfter, in a different class entirely
+    ///
+    /// Gate evaluation order is L3, L1, L4, L5 (cheapest checks first) — see
+    /// SshServerListener.EvaluateGates and
+    /// ConnectionGatePipelineTests.RegistrationOrder_IsEvaluationOrder_L3ThenL1ThenL4ThenL5.
     /// </summary>
     public class SshServerListener : ISshServerListener
     {

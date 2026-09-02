@@ -17,13 +17,13 @@ namespace HIM.Gateway.Models
             /// <summary>Seconds before an idle session is forcefully terminated.</summary>
             public int IdleTimeoutSeconds { get; set; } = 300;
 
-            // ── Per-IP Rate Limit (Layer 3) ───────────────────────────────────
+            // ── Per-IP Rate Limit (Layer 4) ───────────────────────────────────
             /// <summary>Rolling window in seconds for the per-IP connection rate limit.</summary>
             public int RateLimitWindowSeconds { get; set; } = 60;
             /// <summary>Max connection attempts per IP within RateLimitWindowSeconds.</summary>
             public int RateLimitMaxAttempts { get; set; } = 10;
 
-            // ── Per-IP Concurrent Connections (Layer 4) ───────────────────────
+            // ── Per-IP Concurrent Connections (Layer 5) ───────────────────────
             /// <summary>Max simultaneous active connections allowed per IP.</summary>
             public int MaxConcurrentPerIp { get; set; } = 3;
 
@@ -46,7 +46,7 @@ namespace HIM.Gateway.Models
             /// </summary>
             public int TarpitDelayMs { get; set; } = 1500;
 
-            // ── Global Flood Guard (Layer 3 - global) ─────────────────────────
+            // ── Global Flood Guard (Layer 3) ──────────────────────────────────
             /// <summary>
             /// Maximum new TCP connections admitted per second across ALL IPs.
             /// Protects against distributed floods where no single IP hits per-IP limits.
