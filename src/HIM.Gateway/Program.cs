@@ -14,20 +14,21 @@ using Serilog.Events;
 using Serilog.Formatting.Compact;
 
 var builder = Host.CreateApplicationBuilder(args);
-var logDir = Path.Combine(AppContext.BaseDirectory, "Logs");
-var logPath = Path.Combine(logDir, "gateway-log-.json");
 
+// SEC-06 / BL-2: compose sets LOG_PATH for both services; this used to assign logPath from
+// Path.Combine and then test IsNullOrEmpty on the result, which can never be true - dead code
+// that looked like it meant to read the env var. Now it actually does, falling back to the old
+// local default when unset (dev machines don't set LOG_PATH).
+var logPath = Environment.GetEnvironmentVariable("LOG_PATH");
 if (string.IsNullOrEmpty(logPath))
-{
-    logPath = builder.Environment.IsDevelopment()
-        ? Path.Combine(AppContext.BaseDirectory, "Logs", "gateway-log-.json")
-        : "/var/log/him/gateway-log-.json";
-}
+    logPath = Path.Combine(AppContext.BaseDirectory, "Logs", "gateway-log-.json");
+
+var logDir = Path.GetDirectoryName(logPath);
 
 // In development, delete old log files to start fresh
 if (builder.Environment.IsDevelopment())
 {
-    if (Directory.Exists(logDir))
+    if (!string.IsNullOrEmpty(logDir) && Directory.Exists(logDir))
     {
         // Delete all .json log files from previous runs
         foreach (var file in Directory.GetFiles(logDir, "*.json"))

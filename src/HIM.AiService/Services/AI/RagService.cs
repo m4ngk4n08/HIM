@@ -94,7 +94,7 @@ namespace HIM.AiService.Services.AI
 
             if(error != null)
             {
-                yield return $"AI Service: {error}";
+                yield return error;
                 yield break;
             }
 
@@ -217,7 +217,10 @@ namespace HIM.AiService.Services.AI
             }
             catch (Exception ex)
             {
-                return (null, $"Knowledge retrieval failed: {ex.Message}", false);
+                // SEC-06: log the real detail, never the exception message, to the visitor - the
+                // fallback below reads like the persona's own copy, not an internal diagnostic.
+                _logger.LogError(ex, "Knowledge retrieval failed.");
+                return (null, "Something went wrong pulling that up — try again, or email angelodavales0528@gmail.com directly.", false);
             }
         }
     }
