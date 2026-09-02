@@ -5,6 +5,7 @@ using System.Security.Claims;
 using HIM.Gateway.Models;
 using HIM.Gateway.Services.SSH;
 using HIM.Gateway.Services.SSH.Interfaces;
+using HIM.Gateway.Services.SSH.Interfaces.IGates;
 using Microsoft.DevTunnels.Ssh;
 using Microsoft.DevTunnels.Ssh.Algorithms;
 using Microsoft.DevTunnels.Ssh.Events;
@@ -38,11 +39,11 @@ public class ChannelRequestSecurityTests
         public void HandleResize(SshChannel channel, uint width, uint height) { }
     }
 
-    private sealed class NoopIpBanService : IIpBanService
+    private sealed class NoopConnectionSlotGate : IConnectionSlotGate
     {
-        public bool IsBanned(string ipAddress) => false;
-        public void RecordStrike(string ipAddress) { }
-        public void Prune() { }
+        public string Layer => "noop";
+        public GateResult Evaluate(ConnectionContext ctx) => GateResult.Allow();
+        public void Release(ConnectionContext ctx) { }
     }
 
     private sealed class Harness : IAsyncDisposable
@@ -81,7 +82,8 @@ public class ChannelRequestSecurityTests
             scopeFactory,
             hostKeyService: new StaticHostKeyService(hostKey),
             authenticationService: new AllowAllAuthenticationService(),
-            ipBanService: new NoopIpBanService(),
+            gates: Array.Empty<IConnectionGate>(),
+            slotGate: new NoopConnectionSlotGate(),
             logger: NullLogger<SshServerListener>.Instance,
             settings: Options.Create(new SshSettings()));
 

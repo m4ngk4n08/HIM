@@ -3,14 +3,15 @@ using HIM.Gateway.Models;
 // via a per-read CancelAfter that resets on every user keystroke. Do NOT add a session-level
 // CancelAfter here — it would fire unconditionally and kill active sessions mid-write.
 using HIM.Gateway.Services.SSH.Interfaces;
+using HIM.Gateway.Services.SSH.Interfaces.IGates;
 using HIM.Gateway.Services.SSH.Messages;
 using Microsoft.DevTunnels.Ssh;
 using Microsoft.DevTunnels.Ssh.Messages;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text.RegularExpressions;
@@ -45,33 +46,16 @@ namespace HIM.Gateway.Services.SSH
         private readonly IServiceScopeFactory _serviceScopeFactory;
         private readonly IHostKeyService _hostKeyService;
         private readonly IAuthenticationService _authenticationService;
-        private readonly IIpBanService _ipBanService;
+        private readonly IReadOnlyList<IConnectionGate> _gates;
+        private readonly IConnectionSlotGate _slotGate;
         private readonly ILogger<SshServerListener> _logger;
         private readonly SshSettings _settings;
 
         // ── Global Semaphore (bounds total concurrent SSH sessions) ────────
         private readonly SemaphoreSlim _connectionSemaphore;
 
-        // ── Per-IP Tracking ───────────────────────────────────────────────
-        // Active concurrent connection count per IP. Interlocked via AddOrUpdate.
-        private readonly ConcurrentDictionary<string, int> _activeConnectionsPerIp = new();
-
-        // Lock-Free Sliding-window history per IP. Eliminates global lock contention under DDoS.
-        private readonly ConcurrentDictionary<string, ConcurrentQueue<DateTime>> _connectionHistory = new();
-
-        // ── Global Flood Guard — Lock-free Token Bucket ───────────────────
-        // _floodWindowStart: TickCount64 of when the current 1-second window began.
-        // _floodWindowCount: number of connections admitted in the current window.
-        // Both are manipulated exclusively through Interlocked/CAS operations.
-        private long _floodWindowStart = Environment.TickCount64;
-        private int _floodWindowCount;
-
         // ── Bounded Tarpit Tracking ───────────────────────────────────────
         private int _activeTarpits;
-
-        // ── Periodic History Pruning (memory safety) ──────────────────────
-        private int _acceptCounter;
-        private const int PruneHistoryEvery = 500; // every 500 accepted connections
 
         // ── Constructor ───────────────────────────────────────────────────
 
@@ -79,14 +63,19 @@ namespace HIM.Gateway.Services.SSH
             IServiceScopeFactory serviceScopeFactory,
             IHostKeyService hostKeyService,
             IAuthenticationService authenticationService,
-            IIpBanService ipBanService,
+            IEnumerable<IConnectionGate> gates,
+            IConnectionSlotGate slotGate,
             ILogger<SshServerListener> logger,
             IOptions<SshSettings> settings)
         {
             _serviceScopeFactory = serviceScopeFactory;
             _hostKeyService = hostKeyService;
             _authenticationService = authenticationService;
-            _ipBanService = ipBanService;
+            // Materialized once — registration order is evaluation order (see
+            // ServiceExtensions.AddConnectionGate), and re-enumerating IEnumerable<T> on every
+            // connection would re-run the DI resolution logic on the accept-loop hot path.
+            _gates = gates.ToArray();
+            _slotGate = slotGate;
             _logger = logger;
             _settings = settings.Value;
             _connectionSemaphore = new SemaphoreSlim(_settings.MaxConnections, _settings.MaxConnections);
@@ -130,42 +119,14 @@ namespace HIM.Gateway.Services.SSH
                         }
                         ipAddress = remoteEndPoint.Address.ToString();
 
-                        // ─── Layer 3: Global Flood Guard (cheapest, check first) ───
-                        if (!TryConsumeGlobalSlot())
+                        // ─── Gate pipeline: L3, L1, L4, L5, in registration order ───
+                        var gateResult = EvaluateGates(new ConnectionContext(ipAddress));
+                        if (!gateResult.IsAllowed)
                         {
-                            _logger.LogWarning(
-                                "[Security] {Timestamp:yyyy-MM-dd HH:mm:ss} UTC | GLOBAL FLOOD LIMIT | " +
-                                "Rejected: {IpAddress} | Limit: {Limit}/sec",
-                                DateTime.UtcNow, ipAddress, _settings.MaxGlobalConnectionsPerSecond);
                             _connectionSemaphore.Release();
-                            TarpitAndReject(tcpClient, ipAddress, "GlobalFloodLimit");
+                            TarpitAndReject(tcpClient, ipAddress, gateResult.Reason!);
                             continue;
                         }
-
-                        // ─── Layer 1: IP Ban Check (lock-free read) ─────────────────
-                        if (_ipBanService.IsBanned(ipAddress))
-                        {
-                            _logger.LogWarning(
-                                "[Security] {Timestamp:yyyy-MM-dd HH:mm:ss} UTC | BANNED IP | " +
-                                "Rejected: {IpAddress}",
-                                DateTime.UtcNow, ipAddress);
-                            _connectionSemaphore.Release();
-                            TarpitAndReject(tcpClient, ipAddress, "Banned");
-                            continue;
-                        }
-
-                        // ─── Layers 4 & 5: Per-IP Rate Limit + Concurrent Limit ─────
-                        if (!IsAllowedAndTrack(ipAddress))
-                        {
-                            // Strike recording is done inside IsAllowedAndTrack.
-                            _connectionSemaphore.Release();
-                            TarpitAndReject(tcpClient, ipAddress, "RateOrConcurrentLimit");
-                            continue;
-                        }
-
-                        // Trigger periodic history prune (non-blocking, on thread pool)
-                        if (Interlocked.Increment(ref _acceptCounter) % PruneHistoryEvery == 0)
-                            _ = Task.Run(PruneConnectionHistory);
 
                         // Configure OS Socket-Level TCP Keep-Alives (Dead Connection Reclamation)
                         ConfigureSocketKeepAlive(tcpClient.Client);
@@ -201,82 +162,21 @@ namespace HIM.Gateway.Services.SSH
             }
         }
 
-        // ── Layer 3: Global Flood Guard ───────────────────────────────────
-
         /// <summary>
-        /// Lock-free sliding per-second token bucket.
-        /// Uses CAS on _floodWindowStart to elect a single "window-reset winner"
-        /// among concurrent threads. All losers proceed to the Interlocked.Increment
-        /// path which is also lock-free. Worst-case: BanDurationMinutes+1 connections
-        /// in a window boundary race — acceptable overage for a coarse global guard.
+        /// Runs every registered gate in registration order. The first rejecting gate wins and
+        /// later gates do not run — internal (rather than private) so
+        /// ConnectionGatePipelineTests.FirstRejectingGate_Wins_AndLaterGatesDoNotRun exercises
+        /// this exact short-circuit rather than a re-implementation of it.
         /// </summary>
-        private bool TryConsumeGlobalSlot()
+        internal GateResult EvaluateGates(ConnectionContext ctx)
         {
-            var now = Environment.TickCount64;
-            var windowStart = Interlocked.Read(ref _floodWindowStart);
-
-            if (now - windowStart >= 1_000) // 1-second window expired
+            foreach (var gate in _gates)
             {
-                // CAS: only one thread resets the window; others fall through.
-                if (Interlocked.CompareExchange(ref _floodWindowStart, now, windowStart) == windowStart)
-                {
-                    Interlocked.Exchange(ref _floodWindowCount, 1);
-                    return true; // window-reset thread always gets a slot
-                }
+                var result = gate.Evaluate(ctx);
+                if (!result.IsAllowed) return result;
             }
 
-            return Interlocked.Increment(ref _floodWindowCount) <= _settings.MaxGlobalConnectionsPerSecond;
-        }
-
-        // ── Layers 4 & 5: Per-IP Rate Limit + Concurrent Limit ───────────
-
-        /// <summary>
-        /// Returns true if the IP is allowed to proceed; false if it violated
-        /// either the sliding-window rate limit or the concurrent connection cap.
-        /// On failure, a strike is recorded in IpBanService.
-        /// Optimized to use lock-free queues, eliminating lock contention bottlenecks under DDoS.
-        /// </summary>
-        private bool IsAllowedAndTrack(string ipAddress)
-        {
-            var now = DateTime.UtcNow;
-
-            // ── Layer 4: Sliding-window rate limit (Lock-Free) ────────────
-            var history = _connectionHistory.GetOrAdd(ipAddress, _ => new ConcurrentQueue<DateTime>());
-
-            // Prune old entries out of the queue snapshot asynchronously
-            var cutoff = now.AddSeconds(-_settings.RateLimitWindowSeconds);
-            while (history.TryPeek(out var oldest) && oldest < cutoff)
-            {
-                history.TryDequeue(out _);
-            }
-
-            if (history.Count >= _settings.RateLimitMaxAttempts)
-            {
-                _ipBanService.RecordStrike(ipAddress);
-                _logger.LogWarning(
-                    "[Security] {Timestamp:yyyy-MM-dd HH:mm:ss} UTC | RATE LIMIT | " +
-                    "IP: {IpAddress} | Attempts: {Count}/{Max} in {Window}s",
-                    DateTime.UtcNow, ipAddress,
-                    history.Count, _settings.RateLimitMaxAttempts, _settings.RateLimitWindowSeconds);
-                return false;
-            }
-
-            history.Enqueue(now);
-
-            // ── Layer 5: Concurrent connection cap ────────────────────────
-            int active = _activeConnectionsPerIp.AddOrUpdate(ipAddress, 1, (_, val) => val + 1);
-            if (active > _settings.MaxConcurrentPerIp)
-            {
-                DecrementActiveConnection(ipAddress);
-                _ipBanService.RecordStrike(ipAddress);
-                _logger.LogWarning(
-                    "[Security] {Timestamp:yyyy-MM-dd HH:mm:ss} UTC | CONCURRENT LIMIT | " +
-                    "IP: {IpAddress} | Active: {Active}/{Max}",
-                    DateTime.UtcNow, ipAddress, active, _settings.MaxConcurrentPerIp);
-                return false;
-            }
-
-            return true;
+            return GateResult.Allow();
         }
 
         // ── Layer 2: Tarpit ───────────────────────────────────────────────
@@ -339,7 +239,7 @@ namespace HIM.Gateway.Services.SSH
             }
             finally
             {
-                DecrementActiveConnection(ipAddress);
+                _slotGate.Release(new ConnectionContext(ipAddress));
                 _connectionSemaphore.Release();
                 _logger.LogInformation(
                     "[Gateway] {Timestamp:yyyy-MM-dd HH:mm:ss} UTC | Slot released | IP: {IpAddress} | " +
@@ -663,47 +563,10 @@ namespace HIM.Gateway.Services.SSH
             }
         }
 
-        private void DecrementActiveConnection(string ipAddress)
-        {
-            if (string.IsNullOrEmpty(ipAddress)) return;
-            _activeConnectionsPerIp.AddOrUpdate(ipAddress, 0, (_, val) => Math.Max(0, val - 1));
-        }
-
         private void ReleaseAndClose(TcpClient? client)
         {
             _connectionSemaphore.Release();
             if (client != null) try { client.Close(); } catch { }
-        }
-
-        /// <summary>
-        /// Removes IPs from the sliding-window history that have had no
-        /// activity within the rate-limit window. Runs on the thread pool
-        /// every PruneHistoryEvery accepted connections.
-        /// Memory safety guarantee: dictionary size is bounded by the number
-        /// of unique IPs seen within any given window, not cumulative lifetime.
-        /// Lock-Free implementation using ConcurrentQueue structures.
-        /// </summary>
-        private void PruneConnectionHistory()
-        {
-            var cutoff = DateTime.UtcNow.AddSeconds(-_settings.RateLimitWindowSeconds);
-            var toRemove = new List<string>();
-
-            foreach (var (key, history) in _connectionHistory)
-            {
-                while (history.TryPeek(out var oldest) && oldest < cutoff)
-                {
-                    history.TryDequeue(out _);
-                }
-                if (history.IsEmpty) toRemove.Add(key);
-            }
-
-            foreach (var key in toRemove)
-                _connectionHistory.TryRemove(key, out _);
-
-            _logger.LogDebug(
-                "[Gateway] {Timestamp:yyyy-MM-dd HH:mm:ss} UTC | History pruned | " +
-                "Removed: {Removed} IPs | Tracked: {Tracked} IPs",
-                DateTime.UtcNow, toRemove.Count, _connectionHistory.Count);
         }
     }
 }

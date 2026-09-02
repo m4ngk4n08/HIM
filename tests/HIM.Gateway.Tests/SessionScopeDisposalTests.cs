@@ -2,6 +2,7 @@ using HIM.Gateway.Extensions;
 using HIM.Gateway.Models;
 using HIM.Gateway.Services.SSH;
 using HIM.Gateway.Services.SSH.Interfaces;
+using HIM.Gateway.Services.SSH.Interfaces.IGates;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -52,7 +53,8 @@ public class SessionScopeDisposalTests
             probeProvider.GetRequiredService<IServiceScopeFactory>(),
             dependencyProvider.GetRequiredService<IHostKeyService>(),
             dependencyProvider.GetRequiredService<IAuthenticationService>(),
-            dependencyProvider.GetRequiredService<IIpBanService>(),
+            dependencyProvider.GetServices<IConnectionGate>(),
+            dependencyProvider.GetRequiredService<IConnectionSlotGate>(),
             dependencyProvider.GetRequiredService<ILogger<SshServerListener>>(),
             dependencyProvider.GetRequiredService<IOptions<SshSettings>>());
 
