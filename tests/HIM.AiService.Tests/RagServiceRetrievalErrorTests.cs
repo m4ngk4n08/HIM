@@ -36,6 +36,7 @@ public class RagServiceRetrievalErrorTests
         var service = new RagService(
             embedding.Object,
             kb.Object,
+            new DailyTokenBudgetTracker(Options.Create(settings)),
             Options.Create(settings),
             NullLogger<RagService>.Instance);
 

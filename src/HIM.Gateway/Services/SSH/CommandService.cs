@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text;
 using HIM.Gateway.Extensions;
+using HIM.Gateway.Models;
 using HIM.Gateway.Models.Knowledge;
 using HIM.Gateway.Services.SSH.Interfaces;
 using HIM.Gateway.Services.SSH.Interfaces.ICommandDispatcher;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Serilog.Context;
 using Spectre.Console;
 
@@ -24,6 +26,7 @@ public class CommandService : ICommandService
     private readonly ITerminalLayoutService _terminalLayoutService;
     private readonly ILogger<CommandService> _logger;
     private readonly UserSessionState _sessionState;
+    private readonly int _maxAiQueriesPerSession;
     private readonly TimeSpan _cooldownDuration = TimeSpan.FromSeconds(3);
 
     public CommandService(
@@ -36,7 +39,8 @@ public class CommandService : ICommandService
         ITerminalLayoutService terminalLayoutService,
         ILogger<CommandService> logger,
         IPortfolioDataProvider portfolioDataProvider,
-        UserSessionState sessionState)
+        UserSessionState sessionState,
+        IOptions<SshSettings> sshSettings)
     {
         _aiClientService = aiClientService;
         _gameCommandService = gameCommandService;
@@ -47,6 +51,7 @@ public class CommandService : ICommandService
         _terminalLayoutService = terminalLayoutService;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _sessionState = sessionState;
+        _maxAiQueriesPerSession = sshSettings.Value.MaxAiQueriesPerSession;
         _data = portfolioDataProvider.Data;
     }
 
@@ -120,6 +125,18 @@ public class CommandService : ICommandService
                         console.MarkupLine($"[yellow]![/] [grey]{Markup.Escape("Neural Link is cooling down.. please wait")}[/]");
                         break;
                     }
+
+                    // SEC-04: per-session query budget. Once hit, degrade gracefully to the
+                    // static commands instead of continuing to call the AI service - a visitor
+                    // still gets something useful, not an error.
+                    if (_sessionState.AiQueryCount >= _maxAiQueriesPerSession)
+                    {
+                        console.MarkupLine(
+                            $"[yellow]![/] [grey]You've used up this session's {_maxAiQueriesPerSession} AI questions. " +
+                            "Try [white]/menu[/] or [white]/stats[/] for what I already have on file.[/]");
+                        break;
+                    }
+                    _sessionState.AiQueryCount++;
                     await HandleAiChatAsync(console, command, sessionId, ct);
                     break;
             }

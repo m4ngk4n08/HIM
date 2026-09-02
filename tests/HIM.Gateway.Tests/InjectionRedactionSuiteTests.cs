@@ -1,8 +1,10 @@
+using HIM.Gateway.Models;
 using HIM.Gateway.Models.Knowledge;
 using HIM.Gateway.Services.SSH;
 using HIM.Gateway.Services.SSH.Interfaces;
 using HIM.Gateway.Services.SSH.Interfaces.ICommandDispatcher;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Spectre.Console;
 
 namespace HIM.Gateway.Tests;
@@ -112,7 +114,8 @@ public class InjectionRedactionSuiteTests
             new NoOpTerminalLayoutService(),
             new DebugEnabledLogger(),
             new FixedPortfolioDataProvider(),
-            new UserSessionState());
+            new UserSessionState(),
+            Options.Create(new SshSettings()));
 
         var writer = new StringWriter();
         var console = AnsiConsole.Create(new AnsiConsoleSettings

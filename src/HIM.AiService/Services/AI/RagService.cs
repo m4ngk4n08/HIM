@@ -14,6 +14,7 @@ namespace HIM.AiService.Services.AI
         private readonly Kernel _kernel;
         private readonly IEmbeddingService _embeddingService;
         private readonly IKnowledgeBaseService _kbService;
+        private readonly DailyTokenBudgetTracker _tokenBudget;
         private readonly AiSettings _settings;
         private readonly ILogger<RagService> _logger;
 
@@ -26,11 +27,13 @@ namespace HIM.AiService.Services.AI
         public RagService(
             IEmbeddingService embeddingService,
             IKnowledgeBaseService kbService,
+            DailyTokenBudgetTracker tokenBudget,
             IOptions<AiSettings> settings,
             ILogger<RagService> logger)
         {
             _embeddingService = embeddingService;
             _kbService = kbService;
+            _tokenBudget = tokenBudget;
             _settings = settings.Value;
             _logger = logger;
 
@@ -98,6 +101,17 @@ namespace HIM.AiService.Services.AI
                 yield break;
             }
 
+            // SEC-04: once the daily token ceiling is spent, stop calling the model and serve a
+            // static answer built straight from retrieval instead - graceful degradation, not an
+            // error or a dead prompt. The budget is global (owned by this singleton), not
+            // per-session - see DailyTokenBudgetTracker.
+            if (_tokenBudget.IsExhausted)
+            {
+                _logger.LogWarning("[Budget] Daily token ceiling reached; serving a static knowledge-base answer.");
+                yield return BuildStaticFallback(context!);
+                yield break;
+            }
+
             // Synthesize phase: persona/rules as a system message, context+question as a
             // delimited user message (SEC-05) - the cheapest real injection resistance
             // available, and what lets the model tell instruction from data.
@@ -107,14 +121,32 @@ namespace HIM.AiService.Services.AI
             history.AddUserMessage(BuildUserMessage(context!, question));
 
             var stream = chatService.GetStreamingChatMessageContentsAsync(history, kernel: _kernel, cancellationToken: ct);
+            var responseLength = 0;
 
             await foreach(var chunk in stream.WithCancellation(ct))
             {
                 var content = chunk.Content;
 
                 if (!string.IsNullOrEmpty(content))
+                {
+                    responseLength += content.Length;
                     yield return content;
+                }
             }
+
+            // Rough estimate (~4 chars/token) - good enough for a budget guardrail, not exact
+            // accounting. Counts the full round trip: the delimited prompt plus what came back.
+            _tokenBudget.RecordUsage(EstimateTokens(context!.Length + question.Length + responseLength));
+        }
+
+        private static int EstimateTokens(int charCount) => Math.Max(1, charCount / 4);
+
+        // SEC-04 graceful degradation: no model call, just the top retrieved chunk(s) verbatim -
+        // still a useful, on-topic answer rather than an error.
+        private static string BuildStaticFallback(string context)
+        {
+            var topChunk = context.Split("\n---\n", 2)[0];
+            return $"Running on the static knowledge base right now (today's AI budget is used up) — here's what I have on file:\n\n{topChunk}\n\nFor anything more specific, email angelodavales0528@gmail.com.";
         }
 
         // Named per the connector wired up in the constructor's switch (_settings.ChatProvider),

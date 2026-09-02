@@ -9,5 +9,8 @@ namespace HIM.Gateway.Services.SSH
     {
         public DateTime LastQuery { get; set; }
         public string SessionId { get; } = Guid.NewGuid().ToString();
+
+        // SEC-04: per-session AI query budget, checked against SshSettings.MaxAiQueriesPerSession.
+        public int AiQueryCount { get; set; }
     }
 }

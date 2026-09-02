@@ -10,5 +10,6 @@
         public Onnx Onnx { get; set; } = new();
         public SecuritySettings Security { get; set; } = new();
         public RateLimitSettings RateLimit { get; set; } = new();
+        public TokenBudgetSettings TokenBudget { get; set; } = new();
     }
 }

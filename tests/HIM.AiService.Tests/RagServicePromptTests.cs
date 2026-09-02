@@ -27,6 +27,7 @@ public class RagServicePromptTests
         return new RagService(
             Mock.Of<IEmbeddingService>(),
             Mock.Of<IKnowledgeBaseService>(),
+            new DailyTokenBudgetTracker(Options.Create(settings)),
             Options.Create(settings),
             NullLogger<RagService>.Instance);
     }

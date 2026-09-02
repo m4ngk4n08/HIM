@@ -21,6 +21,7 @@ namespace HIM.AiService.Extensions
             services.AddSingleton<IEmbeddingService, EmbeddingService>();
             services.AddSingleton<IVectorSearchService, VectorSearchService>();
             services.AddSingleton<IKnowledgeBaseService, KnowledgeBaseService>();
+            services.AddSingleton<DailyTokenBudgetTracker>();
             services.AddScoped<IRagService, RagService>();
 
             // SEC-08: indexing runs as a hosted service instead of inline in Program.cs, and

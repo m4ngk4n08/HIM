@@ -39,6 +39,7 @@ public class RagServiceNoContextTests
         return new RagService(
             embedding.Object,
             kb.Object,
+            new DailyTokenBudgetTracker(Options.Create(settings)),
             Options.Create(settings),
             NullLogger<RagService>.Instance);
     }

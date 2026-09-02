@@ -27,6 +27,7 @@ public class RagServiceInputCapTests
         return new RagService(
             embeddingMock.Object,
             Mock.Of<IKnowledgeBaseService>(),
+            new DailyTokenBudgetTracker(Options.Create(settings)),
             Options.Create(settings),
             NullLogger<RagService>.Instance);
     }

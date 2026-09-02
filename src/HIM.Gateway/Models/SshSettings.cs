@@ -52,5 +52,16 @@ namespace HIM.Gateway.Models
             /// Protects against distributed floods where no single IP hits per-IP limits.
             /// </summary>
             public int MaxGlobalConnectionsPerSecond { get; set; } = 5;
+
+            // ── AI Chat Session Budget (SEC-04) ────────────────────────────────
+            /// <summary>
+            /// Max AI chat queries allowed per SSH session. Keyed by UserSessionState (one
+            /// instance per connection, from the per-session DI scope) rather than by IP - the
+            /// AI service's own rate limiter partitions by remote IP, but every request it sees
+            /// arrives from the gateway container's single address, so that limiter is
+            /// effectively one global bucket. This budget is the real per-identity control.
+            /// Once hit, the session is pointed at /menu and /stats instead of erroring.
+            /// </summary>
+            public int MaxAiQueriesPerSession { get; set; } = 30;
     }
 }
