@@ -55,7 +55,8 @@ using (var scope = app.Services.CreateScope())
     _ = kbService.InitializeAsync();
 }
 
-app.UseHttpsRedirection();
+// No UseHttpsRedirection: this service is HTTP-only behind the gateway on a private Docker
+// bridge, with no HTTPS port configured, so the middleware could only emit a broken 307 (SEC-09).
 
 // Cheap check first: reject unauthenticated requests before they can burn rate-limit quota.
 app.UseMiddleware<SharedSecretMiddleware>();
