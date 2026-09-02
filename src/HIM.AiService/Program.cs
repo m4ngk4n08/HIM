@@ -1,7 +1,7 @@
 using HIM.AiService.Extensions;
 using HIM.AiService.Models.AI;
 using HIM.AiService.Security;
-using HIM.AiService.Services.AI.Interface;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 using System.Threading.RateLimiting;
 
@@ -49,20 +49,25 @@ builder.Services.AddRateLimiter(options =>
 
 var app = builder.Build();
 
-using (var scope = app.Services.CreateScope())
-{
-    var kbService = scope.ServiceProvider.GetRequiredService<IKnowledgeBaseService>();
-    _ = kbService.InitializeAsync();
-}
-
 // No UseHttpsRedirection: this service is HTTP-only behind the gateway on a private Docker
 // bridge, with no HTTPS port configured, so the middleware could only emit a broken 307 (SEC-09).
 
 // Cheap check first: reject unauthenticated requests before they can burn rate-limit quota.
+// Health checks are exempt (see SharedSecretMiddleware) - a container/orchestrator probe has
+// no shared secret to send.
 app.UseMiddleware<SharedSecretMiddleware>();
 
 app.UseAuthorization();
 app.UseRateLimiter();
 app.MapControllers();
+
+// Live = the process is up, no dependency checks. Ready = the knowledge base has finished
+// indexing (SEC-08) - kept deliberately separate so a readiness probe never reports healthy
+// while KnowledgeBaseIndexingHostedService is still building the index.
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready")
+});
 
 app.Run();

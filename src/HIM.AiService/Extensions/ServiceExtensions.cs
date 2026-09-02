@@ -23,6 +23,13 @@ namespace HIM.AiService.Extensions
             services.AddSingleton<IKnowledgeBaseService, KnowledgeBaseService>();
             services.AddScoped<IRagService, RagService>();
 
+            // SEC-08: indexing runs as a hosted service instead of inline in Program.cs, and
+            // readiness flips only once it completes (or reports unhealthy if it fails).
+            services.AddSingleton<KnowledgeBaseReadinessState>();
+            services.AddHostedService<KnowledgeBaseIndexingHostedService>();
+            services.AddHealthChecks()
+                .AddCheck<KnowledgeBaseReadinessCheck>("knowledge_base", tags: new[] { "ready" });
+
             return services;
         }
     }

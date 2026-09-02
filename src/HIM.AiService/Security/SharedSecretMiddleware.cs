@@ -22,6 +22,15 @@ namespace HIM.AiService.Security
 
         public async Task InvokeAsync(HttpContext context, IOptions<AiSettings> settings)
         {
+            // SEC-08: /health/live and /health/ready are probed by the container runtime /
+            // orchestrator, which has no shared secret to send. Nothing behind them exposes
+            // knowledge-base content - only a boolean up/ready state.
+            if (context.Request.Path.StartsWithSegments("/health"))
+            {
+                await _next(context);
+                return;
+            }
+
             var provided = context.Request.Headers[HeaderName].ToString();
 
             if (!SharedSecretValidator.IsValid(provided, settings.Value.Security.SharedSecret))
