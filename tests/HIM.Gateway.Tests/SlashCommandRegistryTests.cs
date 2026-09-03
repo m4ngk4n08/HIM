@@ -6,7 +6,7 @@ namespace HIM.Gateway.Tests;
 public class SlashCommandRegistryTests
 {
     [Fact]
-    public void Registry_ResolvesFromScopedProvider_WithTheFourDelegatingCommandsDiscovered()
+    public void Registry_ResolvesFromScopedProvider_WithAllEightCommandsDiscovered()
     {
         using var provider = GatewayServiceProviderFactory.Build();
         using var scope = provider.CreateScope();
@@ -15,17 +15,20 @@ public class SlashCommandRegistryTests
 
         Assert.NotNull(registry);
         Assert.Equal(
-            new[] { "/menu", "/stats", "/matrix", "/game" },
-            registry.Descriptors.Select(d => d.Name));
-        Assert.False(registry.TryGet("/help", out _));
+            new[] { "/help", "/menu", "/stats", "/matrix", "/game", "/theme", "/clear", "/exit" },
+            registry.Descriptors.OrderBy(d => d.HelpOrder).Select(d => d.Name));
     }
 
     [Theory]
+    [InlineData("/help")]
     [InlineData("/menu")]
     [InlineData("/stats")]
     [InlineData("/matrix")]
     [InlineData("/game")]
-    public void Registry_RoutesEachDelegatingCommandName_ToAResolvableHandler(string name)
+    [InlineData("/theme")]
+    [InlineData("/clear")]
+    [InlineData("/exit")]
+    public void Registry_RoutesEachCommandName_ToAResolvableHandler(string name)
     {
         using var provider = GatewayServiceProviderFactory.Build();
         using var scope = provider.CreateScope();

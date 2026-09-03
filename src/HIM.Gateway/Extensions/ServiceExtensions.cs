@@ -59,6 +59,10 @@ namespace HIM.Gateway.Extensions
             services.AddScoped<StatsCommand>();
             services.AddScoped<MatrixCommand>();
             services.AddScoped<GameCommand>();
+            services.AddScoped<HelpCommand>();
+            services.AddScoped<ClearCommand>();
+            services.AddScoped<ExitCommand>();
+            services.AddScoped<ThemeCommand>();
 
             // ── Scoped: one instance per SSH shell channel (session) ──
             // A scope is created in SshServerListener.HandleShellChannelAsync, around the
