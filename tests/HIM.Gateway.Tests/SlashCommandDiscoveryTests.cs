@@ -51,9 +51,10 @@ public class SlashCommandDiscoveryTests
     }
 
     // Authorized behavior change #3: a duplicate command name now fails at startup, not at
-    // first use. Exercised against a small synthetic assembly (this test assembly, holding
-    // exactly these two fixtures) rather than the real Gateway assembly, so the failure is
-    // pinned to the duplicate itself.
+    // first use. Exercised against an explicit, small set of fixture types (not the whole test
+    // assembly - see the comment on SlashCommandCatalog.Discover(IEnumerable<Type>) for why:
+    // this file also carries a duplicate-HelpOrder fixture pair for 19B, and a whole-assembly
+    // scan can only ever surface whichever violation Type.GetTypes() happens to return first).
     [SlashCommand("/dup", "First")]
     private sealed class DuplicateFixtureA : ISlashCommand
     {
@@ -70,8 +71,32 @@ public class SlashCommandDiscoveryTests
     public void DuplicateCommandName_ThrowsAtDiscovery_NotAtFirstUse()
     {
         var ex = Assert.Throws<InvalidOperationException>(
-            () => SlashCommandCatalog.Discover(typeof(DuplicateFixtureA).Assembly));
+            () => SlashCommandCatalog.Discover(new[] { typeof(DuplicateFixtureA), typeof(DuplicateFixtureB) }));
 
         Assert.Contains("/dup", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Task 19B: HelpOrder collisions sorted nondeterministically (List<T>.Sort isn't stable), so
+    // two commands sharing an order could make /help render two different tables between runs.
+    // Chosen fix: throw at discovery, the same way a duplicate name already does.
+    [SlashCommand("/order-a", "First", HelpOrder = 42)]
+    private sealed class HelpOrderFixtureA : ISlashCommand
+    {
+        public Task ExecuteAsync(HIM.Gateway.Models.CommandContext context) => Task.CompletedTask;
+    }
+
+    [SlashCommand("/order-b", "Second - different name, same order", HelpOrder = 42)]
+    private sealed class HelpOrderFixtureB : ISlashCommand
+    {
+        public Task ExecuteAsync(HIM.Gateway.Models.CommandContext context) => Task.CompletedTask;
+    }
+
+    [Fact]
+    public void DuplicateHelpOrder_ThrowsAtDiscovery_NotAtFirstUse()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => SlashCommandCatalog.Discover(new[] { typeof(HelpOrderFixtureA), typeof(HelpOrderFixtureB) }));
+
+        Assert.Contains("42", ex.Message);
     }
 }

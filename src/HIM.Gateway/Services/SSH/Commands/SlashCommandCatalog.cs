@@ -18,12 +18,22 @@ namespace HIM.Gateway.Services.SSH.Commands
             Descriptors = descriptors;
         }
 
-        public static SlashCommandCatalog Discover(Assembly assembly)
+        public static SlashCommandCatalog Discover(Assembly assembly) => Discover(assembly.GetTypes());
+
+        // Split out from Discover(Assembly) so tests can hand it an exact, small set of fixture
+        // types instead of a whole assembly. Scanning a whole test assembly for two *different*
+        // violation fixtures (duplicate name vs. duplicate HelpOrder) is a trap: Discover throws
+        // on the first violation Type.GetTypes() happens to return, which is the same fixed
+        // result for every caller scanning that assembly - so two tests expecting two different
+        // violations from the same assembly-wide scan cannot both be reliably true. Explicit
+        // type lists sidestep that entirely.
+        internal static SlashCommandCatalog Discover(IEnumerable<Type> candidateTypes)
         {
             var descriptors = new List<SlashCommandDescriptor>();
             var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var seenHelpOrders = new HashSet<int>();
 
-            foreach (var type in assembly.GetTypes())
+            foreach (var type in candidateTypes)
             {
                 var attribute = type.GetCustomAttribute<SlashCommandAttribute>();
                 if (attribute is null) continue;
@@ -38,6 +48,17 @@ namespace HIM.Gateway.Services.SSH.Commands
                 {
                     throw new InvalidOperationException(
                         $"Duplicate slash command name \"{attribute.Name}\" on {type.FullName}.");
+                }
+
+                // List<T>.Sort is not stable, so two descriptors sharing a HelpOrder could come
+                // out in either order between runs - /help rendering two different tables from
+                // identical code. Refusing to start on a duplicate order (like the name check
+                // above) is safer than tie-breaking on Name: a shared order is almost always a
+                // copy-paste mistake, not two commands that legitimately want to sit together.
+                if (!seenHelpOrders.Add(attribute.HelpOrder))
+                {
+                    throw new InvalidOperationException(
+                        $"Duplicate HelpOrder {attribute.HelpOrder} on {type.FullName}.");
                 }
 
                 descriptors.Add(new SlashCommandDescriptor(
