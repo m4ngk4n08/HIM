@@ -208,4 +208,48 @@ public class CommandRoutingTests
         Assert.Equal(1, aiClient.CallCount);
         Assert.DoesNotContain("COMMANDS", writer.ToString());
     }
+
+    [Fact]
+    public async Task TrailingTextAfterACommandName_StillRoutesToItsHandler_WithZeroAiCalls()
+    {
+        // Task 19A: first-token matching means every command now accepts trailing text (the old
+        // whole-string switch sent "/menu extra" to the AI). Accepted rather than restricted -
+        // see the comment above the tokenizing line in CommandService.ProcessCommandAsync.
+        using var provider = BuildProvider().Provider;
+        using var scope = provider.CreateScope();
+        var commandService = scope.ServiceProvider.GetRequiredService<ICommandService>();
+        var aiClient = (CountingAiClientService)scope.ServiceProvider.GetRequiredService<IAiClientService>();
+        var writer = new StringWriter();
+        using var stream = new MemoryStream();
+
+        await commandService.ProcessCommandAsync(ConsoleOver(writer), "/menu extra", stream, CancellationToken.None);
+
+        Assert.Equal(0, aiClient.CallCount);
+    }
+
+    [Fact]
+    public async Task ThemeCommand_KeepsItsTrailingArgument_AndAppliesIt()
+    {
+        // /theme is the one command that actually needs trailing text - ThemeCommand parses
+        // RawCommand itself, so first-token routing must still hand it the full string.
+        using var provider = BuildProvider().Provider;
+        using var scope = provider.CreateScope();
+        var commandService = scope.ServiceProvider.GetRequiredService<ICommandService>();
+        var aiClient = (CountingAiClientService)scope.ServiceProvider.GetRequiredService<IAiClientService>();
+        var writer = new StringWriter();
+        using var stream = new MemoryStream();
+
+        try
+        {
+            await commandService.ProcessCommandAsync(ConsoleOver(writer), "/theme neon", stream, CancellationToken.None);
+
+            Assert.Equal(0, aiClient.CallCount);
+            Assert.Contains("Neon", writer.ToString());
+            Assert.Equal(Theme.Neon, ThemeService.CurrentTheme);
+        }
+        finally
+        {
+            ThemeService.SetTheme(Theme.Dark);
+        }
+    }
 }

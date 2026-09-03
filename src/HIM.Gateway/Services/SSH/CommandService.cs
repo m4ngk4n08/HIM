@@ -78,6 +78,15 @@ public class CommandService : ICommandService
             // (leading space) doesn't match any switch case and goes to the AI, and
             // RemoveEmptyEntries would silently start matching it - not a change worth making
             // inside a refactor.
+            //
+            // Task 19A: first-token matching also means every command now accepts trailing text
+            // ("/menu extra" runs the menu), where the old whole-string switch sent it to the AI.
+            // Accepted deliberately, not restricted to commands that declare they take arguments:
+            // it is what let /theme stop needing a StartsWith special case, it matches how most
+            // command-line tools behave, and the one real cost - "/help me understand his
+            // Accenture work" now renders the table instead of reaching the AI - is rare enough
+            // that it is better solved by the help text telling people to just type their
+            // question than by a per-command AcceptsArguments flag.
             var token = command.Split(' ')[0];
             if (_commandRegistry.TryGet(token, out var slashCommand))
             {
