@@ -56,6 +56,24 @@
     "Remote-first; light-hybrid in Metro Manila is acceptable",
     "To finish and ship Project Loom v2"
   ],
+  "what_i_build": [
+    {
+      "topic": "What kind of engineer Angelo is",
+      "detail": "Angelo builds developer tools — software whose users are other engineers. That is the through-line across his work, not web apps or CRUD systems. Project Loom v2 is a telemetry platform other developers instrument their own applications with. HIM is a terminal application delivered over SSH. Both are tooling and infrastructure."
+    },
+    {
+      "topic": "Why developer tools",
+      "detail": "He is drawn to problems with a hard constraint: a binary that must run with no runtime installed, a hot path that cannot allocate, a parser that has to be correct or it is worthless. Tools also have an honest measure of success — another engineer either reaches for them or does not. His enterprise work, modernizing banking systems at Accenture, is what taught him which tools are actually missing."
+    },
+    {
+      "topic": "Learning C",
+      "detail": "Angelo is learning C deliberately, to build tools .NET cannot reach: code that runs with no runtime, attaches to another running process, or sits close to the operating system. The first target is a native agent for Project Loom that can observe kernel-level CPU and I/O behaviour a .NET process cannot see about itself. He is a beginner in C. This is a current learning goal, not an existing skill on his CV."
+    },
+    {
+      "topic": "The next tool after HIM and Loom",
+      "detail": "A migration safety checker for SQL Server, working name Bulwark. It reads a database migration script before anyone runs it and fails the build if a statement would lock a table that live users are hitting. Scoped and planned, not started — it is deliberately queued behind finishing Project Loom and HIM."
+    }
+  ],
   "experience": [
     {
       "company": "Accenture",
@@ -153,9 +171,9 @@
       },
       "key_technical_achievements": [
         "Pluggable TUI Game Engine: A decoupled gaming framework using Strategy and Factory patterns, enabling real-time, interactive games (Trivia, RegexQuest, CodeDebugger) over SSH.",
-        "Zero-Allocation Input System: High-performance ANSI parsing service that converts raw SSH byte-streams into game inputs with near-zero GC pressure.",
+        "Zero-Allocation Input System: ANSI parsing service that converts raw SSH byte-streams into game inputs, measured at 0 bytes allocated on the fast path rather than assumed. See measured_performance.",
         "High-Energy UX: 'Digital Surge' transition system using Spectre.Console.Live for immersive, full-screen animations.",
-        "SIMD-Accelerated Math: High-performance vector normalization and Dot Product calculations using System.Numerics, making vector search lightning fast.",
+        "SIMD-Accelerated Math: Vector normalization and dot product using System.Numerics, measured 3.9x faster than an equivalent scalar loop. See measured_performance.",
         "Binary Embedding Cache: Custom binary persistence layer for embeddings, reducing AI service startup time from seconds to milliseconds.",
         "High-Context RAG Ingestion: Recursive JSON flattener that consolidates objects (like work experiences) into semantically rich sentences for better LLM accuracy.",
         "Production-Hardened SSH Architecture: Separated VPS admin access onto hardened OpenSSH port 43829 (key-only, disabled passwords, legacy ssh-rsa compatibility overrides) while keeping the .NET gateway on port 22.",
@@ -163,6 +181,7 @@
         "Persistent Host Key Management: Resolved .NET container permission boundary and C# File.Exists 0-byte file trap via direct file-level bind-mount for /app/hostkey.pem, stabilizing the fingerprint permanently across CI/CD cycles.",
         "Docker-to-Host Security Bridging: Fail2Ban integration with both host systemd-journald and container log streams, dynamically banning bots that trigger rate limits or malicious username requests."
       ],
+      "measured_performance": "Measured with BenchmarkDotNet in Release, not estimated. Hardware: 11th Gen Intel Core i5-11400. Runtime: .NET 10.0.11. SIMD dot product on 384-dimension vectors: 91.1 nanoseconds, 0 bytes allocated, against 351.5 nanoseconds for a scalar loop — 3.9x faster. SIMD L2 normalization: 3.17 microseconds against 6.21 — 2.0x faster. Full top-3 retrieval across the 57-chunk knowledge base: 5.74 microseconds, 136 bytes. ANSI input parser: about 1.1 microseconds and 0 bytes on the synchronous-read fast path. The parser itself does not allocate, though the async method wrapping it can when a real network read does not complete synchronously — the README states that limit rather than hiding it. Reproduce with: cd tests/HIM.Benchmarks && dotnet run -c Release.",
       "ai_engine_deep_dive": {
         "embedding_model": "Local all-minilm-l6-v2 ONNX model — runs fully in-process, zero external API calls for embeddings.",
         "llm_inference": "Semantic Kernel connector using gemini-3.1-flash-lite (Gemini) for fast, high-quality response generation.",
@@ -278,6 +297,18 @@
     {
       "question": "Tell me more about you. Tell me more about you. Who are you? Tell me about yourself. What do you do? What exactly do you do?",
       "answer": "I'm Angelo T. Davales, a full stack .NET developer based in the Philippines, currently building HIM and Project Loom v2 full time."
+    },
+    {
+      "question": "What kind of engineer are you? / What kind of software do you build? / What do you specialise in?",
+      "answer": "I build developer tools — software for other engineers. Project Loom is a telemetry platform you instrument your own application with. HIM is this terminal, delivered over SSH. That is the through-line: tooling and infrastructure, not CRUD web apps."
+    },
+    {
+      "question": "Are you learning anything new? / What are you studying? / What is next for you technically?",
+      "answer": "C. I keep hitting the edge of what .NET can reach — code that runs with no runtime, or attaches to another process — so I am learning C to build a native agent for Project Loom that can see kernel-level behaviour .NET cannot. I am a beginner at it. It is a current goal, not something I would put on my CV yet."
+    },
+    {
+      "question": "What are you building next? What is your next project? What are you building next after HIM and Loom? What comes after Loom?",
+      "answer": "A database migration safety checker for SQL Server. Not started — HIM and Project Loom get finished first."
     }
   ]
 }
