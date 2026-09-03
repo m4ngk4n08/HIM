@@ -18,10 +18,7 @@ public class CommandService : ICommandService
 {
     private readonly PortfolioData? _data;
     private readonly IAiClientService _aiClientService;
-    private readonly IGameCommandService _gameCommandService;
-    private readonly IMenuCommandService _menuCommandService;
-    private readonly IStatsCommandService _statsCommandService;
-    private readonly IMatrixCommandService _matrixCommandService;
+    private readonly ISlashCommandRegistry _commandRegistry;
     private readonly ICommandDispatcherHelper _commandDispatcherHelper;
     private readonly ITerminalLayoutService _terminalLayoutService;
     private readonly ILogger<CommandService> _logger;
@@ -31,10 +28,7 @@ public class CommandService : ICommandService
 
     public CommandService(
         IAiClientService aiClientService,
-        IGameCommandService gameCommandService,
-        IMenuCommandService menuCommandService,
-        IStatsCommandService statsCommandService,
-        IMatrixCommandService matrixCommandService,
+        ISlashCommandRegistry commandRegistry,
         ICommandDispatcherHelper commandDispatcherHelper,
         ITerminalLayoutService terminalLayoutService,
         ILogger<CommandService> logger,
@@ -43,10 +37,7 @@ public class CommandService : ICommandService
         IOptions<SshSettings> sshSettings)
     {
         _aiClientService = aiClientService;
-        _gameCommandService = gameCommandService;
-        _menuCommandService = menuCommandService;
-        _statsCommandService = statsCommandService;
-        _matrixCommandService = matrixCommandService;
+        _commandRegistry = commandRegistry;
         _commandDispatcherHelper = commandDispatcherHelper;
         _terminalLayoutService = terminalLayoutService;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -83,63 +74,36 @@ public class CommandService : ICommandService
 
         try
         {
-            switch (command.ToLower())
+            // Tokenize on the first word only, without RemoveEmptyEntries: today " /help"
+            // (leading space) doesn't match any switch case and goes to the AI, and
+            // RemoveEmptyEntries would silently start matching it - not a change worth making
+            // inside a refactor.
+            var token = command.Split(' ')[0];
+            if (_commandRegistry.TryGet(token, out var slashCommand))
             {
-                case "/help":
-                    ShowHelp(console);
-                    break;
-
-                case "/clear":
-                    await _terminalLayoutService.InitializeTerminalLayoutAsync(console, stream, ct);
-                    break;
-
-                case "/menu":
-                    await _menuCommandService.ExecuteAsync(console, stream, _data, ct);
-                    break;
-
-                case "/stats":
-                    await _statsCommandService.ExecuteAsync(console, stream, _data, ct);
-                    break;
-
-                case "/matrix":
-                    await _matrixCommandService.ExecuteAsync(console, stream, ct);
-                    break;
-
-                case "/game":
-                    await _gameCommandService.ExecuteAsync(console, stream, ct);
-                    break;
-
-                case "/exit":
-                    console.MarkupLine("[red]Closing connection... Goodbye![/]");
-                    throw new OperationCanceledException();
-
-                default:
-                    if(command.ToLower().StartsWith("/theme"))
-                    {
-                        HandleThemeCommand(console, command);
-                        break;
-                    }
-
-                    if (IsRateLimited(_sessionState))
-                    {
-                        console.MarkupLine($"[yellow]![/] [grey]{Markup.Escape("Neural Link is cooling down.. please wait")}[/]");
-                        break;
-                    }
-
-                    // SEC-04: per-session query budget. Once hit, degrade gracefully to the
-                    // static commands instead of continuing to call the AI service - a visitor
-                    // still gets something useful, not an error.
-                    if (_sessionState.AiQueryCount >= _maxAiQueriesPerSession)
-                    {
-                        console.MarkupLine(
-                            $"[yellow]![/] [grey]You've used up this session's {_maxAiQueriesPerSession} AI questions. " +
-                            "Try [white]/menu[/] or [white]/stats[/] for what I already have on file.[/]");
-                        break;
-                    }
-                    _sessionState.AiQueryCount++;
-                    await HandleAiChatAsync(console, command, sessionId, ct);
-                    break;
+                var context = new CommandContext(console, stream, command, _data, sessionId, ct);
+                await slashCommand.ExecuteAsync(context);
+                return;
             }
+
+            if (IsRateLimited(_sessionState))
+            {
+                console.MarkupLine($"[yellow]![/] [grey]{Markup.Escape("Neural Link is cooling down.. please wait")}[/]");
+                return;
+            }
+
+            // SEC-04: per-session query budget. Once hit, degrade gracefully to the
+            // static commands instead of continuing to call the AI service - a visitor
+            // still gets something useful, not an error.
+            if (_sessionState.AiQueryCount >= _maxAiQueriesPerSession)
+            {
+                console.MarkupLine(
+                    $"[yellow]![/] [grey]You've used up this session's {_maxAiQueriesPerSession} AI questions. " +
+                    "Try [white]/menu[/] or [white]/stats[/] for what I already have on file.[/]");
+                return;
+            }
+            _sessionState.AiQueryCount++;
+            await HandleAiChatAsync(console, command, sessionId, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -231,50 +195,5 @@ public class CommandService : ICommandService
             console.WriteLine();
             console.WriteLine();
         }
-    }
-    private void HandleThemeCommand(IAnsiConsole console, string command)
-    {
-        var parts = command.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length < 2)
-        {
-            console.MarkupLine($"[{ThemeService.PrimaryColor}]Current theme: {ThemeService.CurrentTheme}[/]");
-            console.MarkupLine("[grey]Usage: /theme [dark|neon|retro][/]");
-            return;
-        }
-
-        var themeName = parts[1].ToLower();
-        var newTheme = themeName switch
-        {
-            "neon" => Theme.Neon,
-            "retro" => Theme.Retro,
-            _ => Theme.Dark
-        };
-
-        ThemeService.SetTheme(newTheme);
-        console.MarkupLine($"[green]✓ Theme switched to {newTheme}![/]");
-        console.MarkupLine("[grey]Type /clear to refresh the UI.[/]");
-    }
-
-    // 🔧 Fixed: all cell content is escaped to prevent markup errors
-    private void ShowHelp(IAnsiConsole console)
-    {
-        var table = new Table();
-        table.Border(TableBorder.Rounded);
-        table.BorderColor(ThemeService.PrimaryColor);
-        table.Title = new TableTitle(" COMMANDS ", new Style(ThemeService.PrimaryColor));
-
-        table.AddColumn(new TableColumn("Command").Centered().NoWrap());
-        table.AddColumn(new TableColumn("Description").NoWrap());
-
-        // Escape every string to ensure no markup is parsed
-        table.AddRow(Markup.Escape("/menu"), Markup.Escape("Interactive navigation menu"))
-             .AddRow(Markup.Escape("/stats"), Markup.Escape("Developer RPG stats sheet"))
-             .AddRow(Markup.Escape("/matrix"), Markup.Escape("Digital rain animation"))
-             .AddRow(Markup.Escape("/game"), Markup.Escape("Developer trivia game"))
-             .AddRow(Markup.Escape("/theme [dark|neon|retro]"), Markup.Escape("Change UI theme"))
-             .AddRow(Markup.Escape("/clear"), Markup.Escape("Clear screen"))
-             .AddRow(Markup.Escape("/exit"), Markup.Escape("Logout"));
-
-        console.Write(table);
     }
 }

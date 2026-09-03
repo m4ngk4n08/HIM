@@ -1,6 +1,7 @@
 using HIM.Gateway.Models;
 using HIM.Gateway.Models.Knowledge;
 using HIM.Gateway.Services.SSH;
+using HIM.Gateway.Services.SSH.Commands;
 using HIM.Gateway.Services.SSH.Interfaces;
 using HIM.Gateway.Services.SSH.Interfaces.ICommandDispatcher;
 using Microsoft.Extensions.Logging;
@@ -35,24 +36,15 @@ public class InjectionRedactionSuiteTests
         }
     }
 
-    private class NoOpMenuService : IMenuCommandService
+    private class NoOpCommandRegistry : ISlashCommandRegistry
     {
-        public Task ExecuteAsync(IAnsiConsole console, Stream stream, PortfolioData data, CancellationToken ct) => Task.CompletedTask;
-    }
+        public IReadOnlyList<SlashCommandDescriptor> Descriptors { get; } = Array.Empty<SlashCommandDescriptor>();
 
-    private class NoOpStatsService : IStatsCommandService
-    {
-        public Task ExecuteAsync(IAnsiConsole console, Stream stream, PortfolioData data, CancellationToken cancellationToken) => Task.CompletedTask;
-    }
-
-    private class NoOpMatrixService : IMatrixCommandService
-    {
-        public Task ExecuteAsync(IAnsiConsole console, Stream stream, CancellationToken ct) => Task.CompletedTask;
-    }
-
-    private class NoOpGameService : IGameCommandService
-    {
-        public Task ExecuteAsync(IAnsiConsole console, Stream stream, CancellationToken ct) => Task.CompletedTask;
+        public bool TryGet(string name, out ISlashCommand command)
+        {
+            command = null!;
+            return false;
+        }
     }
 
     private class NoOpDispatcherHelper : ICommandDispatcherHelper
@@ -106,10 +98,7 @@ public class InjectionRedactionSuiteTests
     {
         var service = new CommandService(
             new FakeAiClientService(aiResponseChunks),
-            new NoOpGameService(),
-            new NoOpMenuService(),
-            new NoOpStatsService(),
-            new NoOpMatrixService(),
+            new NoOpCommandRegistry(),
             new NoOpDispatcherHelper(),
             new NoOpTerminalLayoutService(),
             new DebugEnabledLogger(),
