@@ -16,10 +16,23 @@ public class IpMaskExtensionTests
     }
 
     [Fact]
-    public void Ipv6_KeepsTheFirst48Bits_AndMasksTheRest()
+    public void Ipv6_KeepsTheFirst32Bits_AndMasksTheRest()
     {
-        // 2001:db8::1 -> first three hextets (2001, 0db8, 0000) kept, rest masked.
-        Assert.Equal("2001:db8:0::x", IpMaskExtension.MaskIp("2001:db8::1"));
+        // 2001:db8::1 -> first two hextets (2001, 0db8) kept, rest masked. 32 bits, not 48:
+        // a /48 is a common ISP allocation to one subscriber site, so it can still single out a
+        // household, while an IPv4 /24 usually spans many. See IpMaskExtension's comment.
+        Assert.Equal("2001:db8::x", IpMaskExtension.MaskIp("2001:db8::1"));
+    }
+
+    [Fact]
+    public void TwoIpv6AddressesInTheSameSubscriberAllocation_MaskToTheSameValue()
+    {
+        // The point of masking to /32 rather than /48: two addresses that differ within the same
+        // /48 - which one ISP typically hands to one customer site - must not be distinguishable
+        // in the rendered panel. Under the previous /48 mask these produced different strings.
+        Assert.Equal(
+            IpMaskExtension.MaskIp("2001:db8:1::1"),
+            IpMaskExtension.MaskIp("2001:db8:2::1"));
     }
 
     [Theory]
