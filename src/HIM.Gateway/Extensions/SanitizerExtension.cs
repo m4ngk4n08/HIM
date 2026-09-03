@@ -29,6 +29,16 @@ namespace HIM.Gateway.Extensions
         // SEC-02: phone-only redaction for the egress boundary (both the AI token stream and
         // directly-rendered portfolio text). Redact() above also strips email, which is wrong
         // here - the contact email is the deliberate public channel and must reach the visitor.
+        //
+        // Task 21D (BL-8): surfaces this is actually applied to today - the AI token stream
+        // (EgressFilterExtension.RedactPiiAsync), and exactly two knowledge-base fields the TUI
+        // renders directly: PersonalInfo.Summary and a job's Highlights (both in
+        // MenuCommandService). Deliberately NOT applied to short structured fields (a project's
+        // Stack, a job's Company/Position/Duration) or anywhere in StatsCommandService, which
+        // renders no free prose - those are short and structured, not places a phone number
+        // could plausibly hide. A future free-text field added to Menu or Stats is unprotected by
+        // default; the pinning test is MenuRedactionBoundaryTests in HIM.Gateway.Tests, which
+        // fails if this boundary moves without a deliberate decision.
         public static string RedactPhone(string input)
         {
             if (string.IsNullOrEmpty(input)) return input;
