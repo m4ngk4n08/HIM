@@ -1,6 +1,18 @@
+# Cryptographic material — must never enter the build context
+hostkey.json
+*.pem
+*.key
+keys/
+
+# Secrets and local configuration
+**/.env
+appsettings.json
+appsettings.Development.json
+**/*.secrets.json
+!appsettings.Template.json
+
 **/.classpath
 **/.dockerignore
-**/.env
 **/.git
 **/.gitignore
 **/.project

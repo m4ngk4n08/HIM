@@ -6,8 +6,10 @@ keys/
 
 # Secrets and local configuration
 **/.env
+appsettings.json
 appsettings.Development.json
 **/*.secrets.json
+!appsettings.Template.json
 
 # Build output and IDE state
 **/bin
