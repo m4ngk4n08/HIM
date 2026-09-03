@@ -138,7 +138,7 @@ public class CommandService : ICommandService
         console.Write(new Markup("[cyan1]AI:[/] "));
 
         var stopwatch = Stopwatch.StartNew();
-        StringBuilder? responseBuilder = _logger.IsEnabled(LogLevel.Debug) ? new StringBuilder() : null;
+        var responseBuilder = new StringBuilder();
 
         try
         {
@@ -160,18 +160,18 @@ public class CommandService : ICommandService
             {
                 // Accumulate first chunk
                 var firstChunk = enumerator.Current;
-                responseBuilder?.Append(firstChunk);
+                responseBuilder.Append(firstChunk);
 
                 while (await enumerator.MoveNextAsync())
                 {
                     var chunk = enumerator.Current;
-                    responseBuilder?.Append(chunk);
+                    responseBuilder.Append(chunk);
                     await Task.Delay(20, ct);
                 }
             }
 
             stopwatch.Stop();
-            var fullResponse = responseBuilder?.ToString() ?? "No response received.";
+            var fullResponse = responseBuilder.ToString();
 
             // Render the response as a panel only – no raw text written outside
             console.WriteLine();
@@ -190,7 +190,7 @@ public class CommandService : ICommandService
                 "SSH AI chat completed. Question: {Question}, ResponseLength: {Length}, Duration: {Duration}ms",
                 safeQuestion, fullResponse.Length, stopwatch.ElapsedMilliseconds);
 
-            if (_logger.IsEnabled(LogLevel.Debug) && responseBuilder != null)
+            if (_logger.IsEnabled(LogLevel.Debug))
             {
                 var safeResponse = SanitizerExtension.Redact(fullResponse);
                 LogWithSession(sessionId, LogLevel.Debug, "SSH AI response: {Response}", safeResponse);

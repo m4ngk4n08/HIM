@@ -4,7 +4,7 @@ using HIM.Gateway.Services.SSH;
 using HIM.Gateway.Services.SSH.Commands;
 using HIM.Gateway.Services.SSH.Interfaces;
 using HIM.Gateway.Services.SSH.Interfaces.ICommandDispatcher;
-using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Spectre.Console;
 
@@ -65,26 +65,6 @@ public class InjectionRedactionSuiteTests
         public PortfolioData? Data => new();
     }
 
-    /// <summary>
-    /// Production's Serilog config overrides the "HIM" category to Debug (Program.cs), which is
-    /// what makes CommandService.HandleAiChatAsync actually accumulate the streamed response
-    /// (responseBuilder is only allocated when IsEnabled(Debug) is true). NullLogger always
-    /// reports false, which would silently make every response render as "No response received."
-    /// regardless of what the AI stream sent - this fake matches the real deployed behavior.
-    /// </summary>
-    private class DebugEnabledLogger : ILogger<CommandService>
-    {
-        public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
-        public bool IsEnabled(LogLevel logLevel) => true;
-        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) { }
-
-        private class NullScope : IDisposable
-        {
-            public static readonly NullScope Instance = new();
-            public void Dispose() { }
-        }
-    }
-
     private class FakeAiClientService : IAiClientService
     {
         private readonly string[] _chunks;
@@ -102,7 +82,7 @@ public class InjectionRedactionSuiteTests
             new NoOpDispatcherHelper(),
             new NoOpTerminalLayoutService(),
             new ThemeService(),
-            new DebugEnabledLogger(),
+            NullLogger<CommandService>.Instance,
             new FixedPortfolioDataProvider(),
             new UserSessionState(),
             Options.Create(new SshSettings()));
