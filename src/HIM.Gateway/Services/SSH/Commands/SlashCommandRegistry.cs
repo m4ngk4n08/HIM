@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using HIM.Gateway.Services.SSH.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -21,7 +22,7 @@ namespace HIM.Gateway.Services.SSH.Commands
 
         public IReadOnlyList<SlashCommandDescriptor> Descriptors => _catalog.Descriptors;
 
-        public bool TryGet(string name, out ISlashCommand command)
+        public bool TryGet(string name, [MaybeNullWhen(false)] out ISlashCommand command)
         {
             var descriptor = _catalog.Descriptors.FirstOrDefault(
                 d => string.Equals(d.Name, name, StringComparison.OrdinalIgnoreCase));

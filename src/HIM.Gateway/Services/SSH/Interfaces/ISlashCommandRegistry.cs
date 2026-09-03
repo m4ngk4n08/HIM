@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using HIM.Gateway.Services.SSH.Commands;
 
 namespace HIM.Gateway.Services.SSH.Interfaces
@@ -8,7 +9,7 @@ namespace HIM.Gateway.Services.SSH.Interfaces
     /// </summary>
     public interface ISlashCommandRegistry
     {
-        bool TryGet(string name, out ISlashCommand command);
+        bool TryGet(string name, [MaybeNullWhen(false)] out ISlashCommand command);
 
         IReadOnlyList<SlashCommandDescriptor> Descriptors { get; }
     }
