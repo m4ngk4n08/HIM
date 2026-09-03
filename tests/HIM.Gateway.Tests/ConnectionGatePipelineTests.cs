@@ -83,14 +83,16 @@ public class ConnectionGatePipelineTests
         var rateLimited = new RecordingGate("L4 PerIpRate", GateResult.Reject("RateOrConcurrentLimit"));
 
         var scopeFactory = new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
+        var gates = new IConnectionGate[] { allow, banned, rateLimited };
         var listener = new SshServerListener(
             scopeFactory,
             new NoopHostKeyService(),
             new NoopAuthenticationService(),
-            gates: new IConnectionGate[] { allow, banned, rateLimited },
+            gates: gates,
             slotGate: new NoopConnectionSlotGate(),
             logger: NullLoggerFactory.Instance.CreateLogger<SshServerListener>(),
-            settings: Options.Create(new SshSettings()));
+            settings: Options.Create(new SshSettings()),
+            metrics: new ConnectionMetricsService(gates, TimeProvider.System));
 
         var result = listener.EvaluateGates(new ConnectionContext("203.0.113.9"));
 

@@ -85,7 +85,8 @@ public class ChannelRequestSecurityTests
             gates: Array.Empty<IConnectionGate>(),
             slotGate: new NoopConnectionSlotGate(),
             logger: NullLogger<SshServerListener>.Instance,
-            settings: Options.Create(new SshSettings()));
+            settings: Options.Create(new SshSettings()),
+            metrics: new ConnectionMetricsService(Array.Empty<IConnectionGate>(), TimeProvider.System));
 
         var tcpListener = new TcpListener(IPAddress.Loopback, 0);
         tcpListener.Start();

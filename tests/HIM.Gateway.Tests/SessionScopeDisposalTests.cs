@@ -56,7 +56,8 @@ public class SessionScopeDisposalTests
             dependencyProvider.GetServices<IConnectionGate>(),
             dependencyProvider.GetRequiredService<IConnectionSlotGate>(),
             dependencyProvider.GetRequiredService<ILogger<SshServerListener>>(),
-            dependencyProvider.GetRequiredService<IOptions<SshSettings>>());
+            dependencyProvider.GetRequiredService<IOptions<SshSettings>>(),
+            dependencyProvider.GetRequiredService<IConnectionMetricsService>());
 
         return new ListenerFixture
         {

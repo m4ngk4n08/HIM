@@ -81,7 +81,7 @@ namespace HIM.Gateway.Services.SSH
             IConnectionSlotGate slotGate,
             ILogger<SshServerListener> logger,
             IOptions<SshSettings> settings,
-            IConnectionMetricsService? metrics = null)
+            IConnectionMetricsService metrics)
         {
             _serviceScopeFactory = serviceScopeFactory;
             _hostKeyService = hostKeyService;
@@ -94,10 +94,11 @@ namespace HIM.Gateway.Services.SSH
             _logger = logger;
             _settings = settings.Value;
             _connectionSemaphore = new SemaphoreSlim(_settings.MaxConnections, _settings.MaxConnections);
-            // Optional, defaulting to a private instance built from the same gate list: keeps
-            // this constructor callable without a DI container (ConnectionGatePipelineTests drives
-            // EvaluateGates directly), while production always gets the real registered singleton.
-            _metrics = metrics ?? new ConnectionMetricsService(_gates, TimeProvider.System);
+            // Required, deliberately: an optional parameter with a private fallback would let a
+            // missing DI registration slip past ValidateOnBuild, and the listener would then
+            // silently count into a throwaway instance while /defense reported zeros forever with
+            // nothing failing anywhere. A required parameter turns that into a startup error.
+            _metrics = metrics;
         }
 
         // ── Public API ────────────────────────────────────────────────────
