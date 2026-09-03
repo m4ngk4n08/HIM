@@ -85,4 +85,17 @@ public class RagServiceCitationsTests
         Assert.NotNull(error);
         Assert.Contains("too long", error, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public async Task AlreadyCancelledToken_ThrowsOperationCanceled_InsteadOfCompleting()
+    {
+        // Task 24A: the token was accepted but passed to nothing. Neither IEmbeddingService nor
+        // IKnowledgeBaseService takes a CancellationToken, so this is checked at the two phase
+        // boundaries inside GetCitationsAsync itself, not threaded into either dependency.
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => CreateService().GetCitationsAsync("Tell me about his experience at Accenture", cts.Token));
+    }
 }

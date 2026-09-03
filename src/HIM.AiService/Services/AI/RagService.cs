@@ -160,10 +160,18 @@ namespace HIM.AiService.Services.AI
                 return (null, $"That question's too long — keep it under {_settings.Security.MaxQuestionLength} characters.");
             }
 
+            // Task 24A: neither IEmbeddingService nor IKnowledgeBaseService takes a
+            // CancellationToken (checked - no overload exists on either interface), and adding
+            // one is a larger refactor touching the deployed /ask path that this task doesn't
+            // cover. A check at each phase boundary is the honest minimum: it can't interrupt an
+            // embedding call or a search already in flight, but it stops this method from running
+            // either phase at all once the caller has already given up.
+            ct.ThrowIfCancellationRequested();
             var stopwatch = Stopwatch.StartNew();
             var queryVector = await _embeddingService.GetNormalizeLocalEmbeddingAsync(question);
             var embeddingMs = stopwatch.Elapsed.TotalMilliseconds;
 
+            ct.ThrowIfCancellationRequested();
             stopwatch.Restart();
             var (scored, chunksScanned) = await _kbService.SearchWithScoresAsync(
                 queryVector, topK: 10, minScore: _settings.KnowledgeBase.MinSimilarityScore);
