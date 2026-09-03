@@ -6,15 +6,15 @@ HIM is an interactive portfolio experience delivered via the SSH protocol. It fe
 - ✅ **Phase 1 (AI Service):** Completed. Manual RAG pipeline implemented with Llama3 and all-minilm.
 - ✅ **Phase 2 (SSH Bridge):** Completed. Custom SSH gateway with host key management and session handling.
 - ✅ **Phase 3 (Terminal UI):** Completed. Responsive TUI with Spectre.Console, featuring a splash screen, command processing, and live AI chat.
-- ✅ **Phase 4 (Integration & Personality):** Completed. Optimized SIMD-powered RAG, binary caching, and polished TUI animations.
+- ✅ **Phase 4 (Integration & Personality):** Completed. SIMD-accelerated RAG retrieval (measured — see "Measured Performance" below), binary caching, and polished TUI animations.
 - ✅ **Phase 5 (Validation & Refinement):** Completed. Final stability checks, TUI game engine expansion, and automated error-handling routines.
 - ✅ **Phase 6 (Deployment & Security):** Completed. Native nftables firewall integration, isolated multi-tier port management, Fail2Ban container log filtering, and permanent cryptographic host keys.
 
 ## 🚀 Key Technical Achievements
 - **Pluggable TUI Game Engine:** Developed a decoupled gaming framework using Strategy & Factory patterns, enabling real-time, interactive games (like Trivia, RegexQuest, and CodeDebugger) over SSH.
-- **Zero-Allocation Input System:** Implemented a high-performance ANSI parsing service that converts raw SSH byte-streams into game inputs with near-zero GC pressure.
+- **Zero-Allocation Input System:** A high-performance ANSI parsing service that converts raw SSH byte-streams into game inputs. Measured 0 B allocated per parse on the synchronous read path (see "Measured Performance" below for what that does and doesn't cover).
 - **High-Energy UX:** Created a transition system using `Spectre.Console.Live` for immersive, full-screen animations.
-- **SIMD-Accelerated Math:** High-performance vector normalization and Dot Product calculations using `System.Numerics`, making vector search lightning fast.
+- **SIMD-Accelerated Math:** Vector normalization and dot-product calculations using `System.Numerics`. Measured 3.9x faster dot products and 2.0x faster normalization than a scalar loop on the real 384-dimensional embedding size (see "Measured Performance" below).
 - **Binary Embedding Cache:** Implemented a custom binary persistence layer for embeddings, reducing AI service startup time from seconds to milliseconds.
 - **High-Context RAG Ingestion:** Developed a recursive JSON flattener that consolidates objects (like work experiences) into semantically rich sentences for better LLM accuracy.
 - **Polished SSH UX:** Integrated synchronized spinners and a character-by-character "typing" delay to simulate a real terminal interaction.
@@ -24,6 +24,24 @@ HIM is an interactive portfolio experience delivered via the SSH protocol. It fe
 - **Persistent Host Key Management:** Resolved the `.NET` container permission denied boundary and the C# `File.Exists` 0-byte file trap by implementing a direct file-level bind-mount for `/app/hostkey.pem`, stabilizing the host fingerprint permanently across continuous delivery cycles [1].
 - **Docker-to-Host Security Bridging:** Implemented Fail2Ban integration with both host systemd-journald and container log streams, dynamically banning bots that trigger rate limits or malicious username requests.
 - **Self-Healing Connection Pool:** Built-in automatic resource reclamation utilizing multi-tier disarmable timeouts, OS-level TCP Keep-Alives [2.2.1], and immediate session teardown upon rejected command requests.
+
+## 📊 Measured Performance
+Every figure below comes from `tests/HIM.Benchmarks` (BenchmarkDotNet), not from estimation. Hardware: 11th Gen Intel Core i5-11400 @ 2.60GHz. Runtime: .NET 10.0.11 (10.0.1126.37416).
+
+| Operation | Time | Allocated | Comparison |
+|---|---|---|---|
+| Dot product, 384-dim (SIMD) | 91.1 ns | 0 B | vs. 351.5 ns scalar loop — **3.9x faster** |
+| L2 normalization, 384-dim (SIMD) | 3.17 µs | 0 B | vs. 6.21 µs scalar loop — **2.0x faster** |
+| RAG retrieval, 57 chunks × 384-dim | 5.74 µs | 136 B | top-3 search over the full production knowledge base (embedding generation not included) |
+| Input parser, arrow-key sequence | 1.13 µs | 0 B | synchronous-read fast path only, see note below |
+| Input parser, single keypress | 1.12 µs | 0 B | synchronous-read fast path only, see note below |
+
+**What the input-parser numbers don't cover:** `GameInputService.GetNextInputAsync` is fed a pre-filled `MemoryStream`, whose `ReadAsync` always completes synchronously — that's what makes the 0 B figure honest for the span-parsing logic itself. A real SSH network stream does not complete synchronously the way a `MemoryStream` does; when it doesn't, the compiler-generated `async` state machine and its `Task<GameInput>` are heap-allocated, per keystroke. Real per-keystroke cost in production is dominated by network I/O this benchmark deliberately excludes.
+
+Reproduce (must be Release — BenchmarkDotNet refuses to run Debug):
+```bash
+cd tests/HIM.Benchmarks && dotnet run -c Release
+```
 
 ## 🏗️ Architecture
 1. **HIM.Gateway:** The SSH server entry point (Console .NET 10). Manages TUI rendering, session lifecycle, and the pluggable Game Engine.
