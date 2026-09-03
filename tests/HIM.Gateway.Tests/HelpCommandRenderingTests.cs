@@ -15,12 +15,12 @@ namespace HIM.Gateway.Tests;
 /// </summary>
 public class HelpCommandRenderingTests
 {
-    private static string RenderOriginalHardcodedTable()
+    private static string RenderOriginalHardcodedTable(IThemeService theme)
     {
         var table = new Table();
         table.Border(TableBorder.Rounded);
-        table.BorderColor(ThemeService.PrimaryColor);
-        table.Title = new TableTitle(" COMMANDS ", new Style(ThemeService.PrimaryColor));
+        table.BorderColor(theme.PrimaryColor);
+        table.Title = new TableTitle(" COMMANDS ", new Style(theme.PrimaryColor));
 
         table.AddColumn(new TableColumn("Command").Centered().NoWrap());
         table.AddColumn(new TableColumn("Description").NoWrap());
@@ -55,6 +55,7 @@ public class HelpCommandRenderingTests
         using var provider = GatewayServiceProviderFactory.Build();
         using var scope = provider.CreateScope();
         var registry = scope.ServiceProvider.GetRequiredService<ISlashCommandRegistry>();
+        var theme = scope.ServiceProvider.GetRequiredService<IThemeService>();
         Assert.True(registry.TryGet("/help", out var help));
 
         var writer = new StringWriter();
@@ -69,6 +70,6 @@ public class HelpCommandRenderingTests
         var context = new CommandContext(console, stream, "/help", new PortfolioData(), "session", CancellationToken.None);
         await help.ExecuteAsync(context);
 
-        Assert.Equal(RenderOriginalHardcodedTable(), writer.ToString());
+        Assert.Equal(RenderOriginalHardcodedTable(theme), writer.ToString());
     }
 }

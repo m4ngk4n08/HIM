@@ -236,20 +236,14 @@ public class CommandRoutingTests
         using var scope = provider.CreateScope();
         var commandService = scope.ServiceProvider.GetRequiredService<ICommandService>();
         var aiClient = (CountingAiClientService)scope.ServiceProvider.GetRequiredService<IAiClientService>();
+        var theme = scope.ServiceProvider.GetRequiredService<IThemeService>();
         var writer = new StringWriter();
         using var stream = new MemoryStream();
 
-        try
-        {
-            await commandService.ProcessCommandAsync(ConsoleOver(writer), "/theme neon", stream, CancellationToken.None);
+        await commandService.ProcessCommandAsync(ConsoleOver(writer), "/theme neon", stream, CancellationToken.None);
 
-            Assert.Equal(0, aiClient.CallCount);
-            Assert.Contains("Neon", writer.ToString());
-            Assert.Equal(Theme.Neon, ThemeService.CurrentTheme);
-        }
-        finally
-        {
-            ThemeService.SetTheme(Theme.Dark);
-        }
+        Assert.Equal(0, aiClient.CallCount);
+        Assert.Contains("Neon", writer.ToString());
+        Assert.Equal(Theme.Neon, theme.CurrentTheme);
     }
 }
