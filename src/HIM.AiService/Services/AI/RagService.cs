@@ -1,10 +1,12 @@
 ﻿using HIM.AiService.Extensions;
+using HIM.AiService.Models;
 using HIM.AiService.Models.AI;
 using HIM.AiService.Services.AI.Interface;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
 namespace HIM.AiService.Services.AI
@@ -137,6 +139,71 @@ namespace HIM.AiService.Services.AI
             // Rough estimate (~4 chars/token) - good enough for a budget guardrail, not exact
             // accounting. Counts the full round trip: the delimited prompt plus what came back.
             _tokenBudget.RecordUsage(EstimateTokens(context!.Length + question.Length + responseLength));
+        }
+
+        // Task 22B: /api/chat/cite. A second, additive endpoint rather than a citation channel
+        // grafted onto AskAsync's token stream - AskAsync itself is untouched. Reuses
+        // SearchWithScoresAsync (same retrieval AskAsync's TryGetContextAsync uses) instead of
+        // duplicating the embed-then-search sequence.
+        private const int PreviewMaxLength = 150;
+
+        public async Task<(CitationResponse? Result, string? Error)> GetCitationsAsync(string question, CancellationToken ct = default)
+        {
+            // Same cap AskAsync enforces (SEC-05) - this endpoint must not be a way around it.
+            if (question.Length > _settings.Security.MaxQuestionLength)
+            {
+                var preview = question.Length > 60 ? question[..60] + "…" : question;
+                _logger.LogWarning(
+                    "[Security] Rejected oversized citation request ({Length} chars, cap {Cap}): {Preview}",
+                    question.Length, _settings.Security.MaxQuestionLength, SanitizerExtension.Redact(preview));
+
+                return (null, $"That question's too long — keep it under {_settings.Security.MaxQuestionLength} characters.");
+            }
+
+            var stopwatch = Stopwatch.StartNew();
+            var queryVector = await _embeddingService.GetNormalizeLocalEmbeddingAsync(question);
+            var embeddingMs = stopwatch.Elapsed.TotalMilliseconds;
+
+            stopwatch.Restart();
+            var (scored, chunksScanned) = await _kbService.SearchWithScoresAsync(
+                queryVector, topK: 10, minScore: _settings.KnowledgeBase.MinSimilarityScore);
+            var searchMs = stopwatch.Elapsed.TotalMilliseconds;
+
+            var chunks = scored.Select(s => new CitationChunk
+            {
+                Label = ExtractLabel(s.Chunk.Text),
+                Score = s.Score,
+                Preview = BuildPreview(s.Chunk.Text)
+            }).ToList();
+
+            return (new CitationResponse
+            {
+                Question = question,
+                Chunks = chunks,
+                Timings = new CitationTimings
+                {
+                    EmbeddingMs = embeddingMs,
+                    SearchMs = searchMs,
+                    ChunksScanned = chunksScanned,
+                    ChunksReturned = chunks.Count
+                }
+            }, null);
+        }
+
+        // Chunk text is always "<FlattenJson path prefix>: <content>" - the prefix is the
+        // citation label (e.g. "projects [Project Loom v2]", "stress_test_qna"). No schema
+        // change needed; splitting on the first ": " recovers it.
+        private static string ExtractLabel(string chunkText)
+        {
+            var idx = chunkText.IndexOf(": ", StringComparison.Ordinal);
+            return idx > 0 ? chunkText[..idx] : chunkText;
+        }
+
+        private static string BuildPreview(string chunkText)
+        {
+            var idx = chunkText.IndexOf(": ", StringComparison.Ordinal);
+            var content = idx > 0 ? chunkText[(idx + 2)..] : chunkText;
+            return content.Length > PreviewMaxLength ? content[..PreviewMaxLength] + "…" : content;
         }
 
         private static int EstimateTokens(int charCount) => Math.Max(1, charCount / 4);

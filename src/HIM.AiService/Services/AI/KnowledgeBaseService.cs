@@ -307,12 +307,18 @@ namespace HIM.AiService.Services.AI
 
         public async Task<List<KnowledgeChunks>> SearchAsync(float[] queryEmbedding, int topK = 3, float minScore = float.NegativeInfinity)
         {
+            var (results, _) = await SearchWithScoresAsync(queryEmbedding, topK, minScore);
+            return results.Select(r => r.Chunk).ToList();
+        }
+
+        public async Task<(List<ScoredChunk> Results, int ChunksScanned)> SearchWithScoresAsync(float[] queryEmbedding, int topK = 3, float minScore = float.NegativeInfinity)
+        {
             if (!_chunks.Any())
             {
                 await InitializeAsync();
             }
 
-            if (!_chunks.Any()) return new List<KnowledgeChunks>();
+            if (!_chunks.Any()) return (new List<ScoredChunk>(), 0);
 
             // Use PriorityQueue for O(N log k)
             var pq = new PriorityQueue<(KnowledgeChunks Chunk, float Score), float>();
@@ -327,13 +333,13 @@ namespace HIM.AiService.Services.AI
 
             // topK is only an upper bound: a chunk below minScore is dropped even if it made
             // the top-K cut, so an irrelevant match never rides along just to fill the quota.
-            var results = new List<KnowledgeChunks>();
+            var results = new List<ScoredChunk>();
             while (pq.Count > 0)
             {
                 var (chunk, score) = pq.Dequeue();
-                if (score >= minScore) results.Insert(0, chunk);
+                if (score >= minScore) results.Insert(0, new ScoredChunk { Chunk = chunk, Score = score });
             }
-            return results;
+            return (results, _chunks.Count);
         }
     }
 }

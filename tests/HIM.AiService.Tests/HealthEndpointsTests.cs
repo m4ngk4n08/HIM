@@ -36,6 +36,9 @@ public class HealthEndpointsTests
 
         public Task<List<KnowledgeChunks>> SearchAsync(float[] queryEmbedding, int topK = 3, float minScore = float.NegativeInfinity)
             => Task.FromResult(new List<KnowledgeChunks>());
+
+        public Task<(List<ScoredChunk> Results, int ChunksScanned)> SearchWithScoresAsync(float[] queryEmbedding, int topK = 3, float minScore = float.NegativeInfinity)
+            => Task.FromResult((new List<ScoredChunk>(), 0));
     }
 
     private static (WebApplication App, GatedKnowledgeBaseService Kb) BuildApp(bool fail = false)

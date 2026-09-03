@@ -41,5 +41,27 @@ namespace HIM.AiService.Controllers
 
         }
 
+        /// <summary>
+        /// Task 22B: shows which knowledge-base chunks would answer a question, with their
+        /// similarity scores and retrieval timings - the same retrieval /ask uses, without a
+        /// model call. Additive; does not change /ask's stream or contract.
+        /// </summary>
+        [HttpPost("cite")]
+        [EnableRateLimiting("ChatAsk")]
+        public async Task<IActionResult> Cite([FromBody] ChatRequest request, CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(request.Question))
+            {
+                _logger.LogWarning("Received and empty citation request.");
+                return BadRequest("Question is required.");
+            }
+
+            var (result, error) = await _ragService.GetCitationsAsync(request.Question, ct);
+
+            if (error != null) return BadRequest(error);
+
+            return Ok(result);
+        }
+
     }
 }
