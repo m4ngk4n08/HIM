@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <!-- HIM.AiService's minimal-hosting Program.cs generates its own top-level 'Program' type,
+         which this project's own Program.cs collides with once both are in scope via the
+         ProjectReference below. Harmless (the compiler picks this project's own type), so
+         suppressed rather than counted as a real warning. -->
+    <NoWarn>$(NoWarn);CS0436</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" Version="0.14.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\HIM.AiService\HIM.AiService.csproj" />
+    <ProjectReference Include="..\..\src\HIM.Gateway\HIM.Gateway.csproj" />
+  </ItemGroup>
+
+</Project>
