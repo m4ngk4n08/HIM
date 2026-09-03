@@ -1,5 +1,6 @@
 using HIM.Gateway.Services.SSH;
 using HIM.Gateway.Services.SSH.CommandDispatcher;
+using HIM.Gateway.Services.SSH.Commands;
 using HIM.Gateway.Services.SSH.Gates;
 using HIM.Gateway.Services.SSH.Game;
 using HIM.Gateway.Services.SSH.Game.TheGame;
@@ -47,6 +48,13 @@ namespace HIM.Gateway.Extensions
             // The knowledge base is immutable and identical for every session - load it once
             // and hand out the parsed object, instead of re-reading it per connection.
             services.AddSingleton<IPortfolioDataProvider, PortfolioDataProvider>();
+
+            // Slash command discovery: reflect over the assembly once at startup (an SSH
+            // connection gets its own DI scope, so scanning here instead of in the registry
+            // means this runs once per process, not once per visitor). A duplicate [SlashCommand]
+            // name throws here, at startup, not at first use.
+            services.AddSingleton(SlashCommandCatalog.Discover(typeof(ServiceExtensions).Assembly));
+            services.AddScoped<ISlashCommandRegistry, SlashCommandRegistry>();
 
             // ── Scoped: one instance per SSH shell channel (session) ──
             // A scope is created in SshServerListener.HandleShellChannelAsync, around the
