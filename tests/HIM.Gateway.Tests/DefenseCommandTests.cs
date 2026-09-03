@@ -28,11 +28,33 @@ public class DefenseCommandTests
             ColorSystem = ColorSystemSupport.NoColors,
             Out = new AnsiConsoleOutput(writer)
         });
+        // Wide enough that Spectre's table never wraps a cell, so these tests assert on the
+        // sentences the command actually produces rather than on where an 80-column break landed.
+        console.Profile.Width = 240;
         using var stream = new MemoryStream();
         var context = new CommandContext(console, stream, "/defense", new PortfolioData(), "session", CancellationToken.None);
 
         await command!.ExecuteAsync(context);
         return writer.ToString();
+    }
+
+    [Fact]
+    public async Task EveryRegisteredLayer_GetsItsOwnExplanation_NotTheGenericFallback()
+    {
+        // DefenseCommand.Explain switches on the exact IConnectionGate.Layer strings. Rename one
+        // and the panel silently degrades to the catch-all sentence for that row - the render
+        // still succeeds, so without this test nothing would fail and the regression would ship.
+        // Pins the four real registered gates, resolved through the real container.
+        using var provider = GatewayServiceProviderFactory.Build();
+        using var scope = provider.CreateScope();
+
+        var output = await RunDefenseAsync(scope.ServiceProvider);
+
+        Assert.Contains("came from an IP already banned for past abuse.", output);
+        Assert.Contains("connections/second across the whole site.", output);
+        Assert.Contains("attempts per", output);
+        Assert.Contains("connections at once.", output);
+        Assert.DoesNotContain("did not clear this layer's check.", output);
     }
 
     [Fact]
