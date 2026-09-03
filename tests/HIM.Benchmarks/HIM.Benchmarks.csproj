@@ -22,4 +22,15 @@
     <ProjectReference Include="..\..\src\HIM.Gateway\HIM.Gateway.csproj" />
   </ItemGroup>
 
+  <!-- Linked (not copied), same as HIM.AiService.Tests, so NormalizeL2Benchmarks can construct a
+       real EmbeddingService - its constructor loads the ONNX model and tokenizer eagerly. -->
+  <ItemGroup>
+    <None Include="..\..\src\HIM.AiService\Models\AllMiniLML6V2\model.onnx" Link="Models\AllMiniLML6V2\model.onnx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\..\src\HIM.AiService\Models\AllMiniLML6V2\vocab.txt" Link="Models\AllMiniLML6V2\vocab.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

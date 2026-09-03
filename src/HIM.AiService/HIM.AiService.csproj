@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="HIM.AiService.Tests" />
+    <InternalsVisibleTo Include="HIM.Benchmarks" />
   </ItemGroup>
 
   <ItemGroup>

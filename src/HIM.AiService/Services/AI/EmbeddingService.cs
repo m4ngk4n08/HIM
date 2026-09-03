@@ -122,7 +122,7 @@ namespace HIM.AiService.Services.AI
         /// </summary>
         /// <param name="embedding"></param>
         /// <exception cref="NotImplementedException"></exception>
-        private void NormalizeL2(Span<float> vector)
+        internal void NormalizeL2(Span<float> vector)
         {
             float sum = 0;
             int i = 0;
