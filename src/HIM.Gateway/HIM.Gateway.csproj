@@ -52,6 +52,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="HIM.Gateway.Tests" />
+    <InternalsVisibleTo Include="HIM.Benchmarks" />
   </ItemGroup>
 
 </Project>
