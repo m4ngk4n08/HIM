@@ -102,6 +102,46 @@ public class ServiceLifetimeTests
         Assert.Same(direct, second);
     }
 
+    [Fact]
+    public void TwoConcurrentSessions_ThemeChangeInOneScope_DoesNotAffectTheOther()
+    {
+        // The actual reported bug (BL-10): ThemeService used to be a static class, so one
+        // visitor's /theme neon recolored every other concurrent session. Two scopes must now
+        // see independent IThemeService instances.
+        using var provider = GatewayServiceProviderFactory.Build();
+
+        using var sessionOneScope = provider.CreateScope();
+        using var sessionTwoScope = provider.CreateScope();
+
+        var themeOne = sessionOneScope.ServiceProvider.GetRequiredService<IThemeService>();
+        var themeTwo = sessionTwoScope.ServiceProvider.GetRequiredService<IThemeService>();
+
+        themeOne.SetTheme(Theme.Neon);
+
+        Assert.Equal(Theme.Dark, themeTwo.CurrentTheme);
+        Assert.Equal(Spectre.Console.Color.Cyan1, themeTwo.PrimaryColor);
+    }
+
+    [Fact]
+    public void ThirdScope_CreatedAfterFirstScopeDisposed_StillGetsTheDefaultTheme()
+    {
+        // The worse half of BL-10: the next visitor to connect inherited whatever theme the
+        // previous visitor left set, because the static field outlived the session that set
+        // it. A scope created after the setting scope is disposed must not see that theme.
+        using var provider = GatewayServiceProviderFactory.Build();
+
+        using (var sessionOneScope = provider.CreateScope())
+        {
+            var themeOne = sessionOneScope.ServiceProvider.GetRequiredService<IThemeService>();
+            themeOne.SetTheme(Theme.Neon);
+        }
+
+        using var sessionThreeScope = provider.CreateScope();
+        var themeThree = sessionThreeScope.ServiceProvider.GetRequiredService<IThemeService>();
+
+        Assert.Equal(Theme.Dark, themeThree.CurrentTheme);
+    }
+
     private static IGameService ResolvePacMan(IServiceProvider provider)
     {
         var game = provider.GetServices<IGameService>().FirstOrDefault(g => g.Name == "Pac-Man");
