@@ -38,6 +38,10 @@ namespace HIM.Gateway.Services.SSH.Gates
 
         public string Layer => "L4 PerIpRate";
 
+        /// <summary>Test/panel-only window into _connectionHistory's size, same shape as
+        /// PerIpConcurrencyGate.TrackedIpCount.</summary>
+        internal int TrackedIpCount => _connectionHistory.Count;
+
         public PerIpRateGate(
             IOptions<SshSettings> settings,
             IIpBanService ipBanService,

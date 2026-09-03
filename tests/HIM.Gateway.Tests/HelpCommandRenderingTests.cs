@@ -32,7 +32,8 @@ public class HelpCommandRenderingTests
              .AddRow(Markup.Escape("/theme [dark|neon|retro]"), Markup.Escape("Change UI theme"))
              .AddRow(Markup.Escape("/clear"), Markup.Escape("Clear screen"))
              .AddRow(Markup.Escape("/exit"), Markup.Escape("Logout"))
-             .AddRow(Markup.Escape("/cite"), Markup.Escape("Show which knowledge-base chunks answered your last question"));
+             .AddRow(Markup.Escape("/cite"), Markup.Escape("Show which knowledge-base chunks answered your last question"))
+             .AddRow(Markup.Escape("/defense"), Markup.Escape("Live view of the 8-layer connection defense pipeline"));
 
         return RenderToString(table);
     }

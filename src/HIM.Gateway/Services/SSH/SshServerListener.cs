@@ -63,6 +63,7 @@ namespace HIM.Gateway.Services.SSH
         private readonly IConnectionSlotGate _slotGate;
         private readonly ILogger<SshServerListener> _logger;
         private readonly SshSettings _settings;
+        private readonly IConnectionMetricsService _metrics;
 
         // ── Global Semaphore (bounds total concurrent SSH sessions) ────────
         private readonly SemaphoreSlim _connectionSemaphore;
@@ -79,7 +80,8 @@ namespace HIM.Gateway.Services.SSH
             IEnumerable<IConnectionGate> gates,
             IConnectionSlotGate slotGate,
             ILogger<SshServerListener> logger,
-            IOptions<SshSettings> settings)
+            IOptions<SshSettings> settings,
+            IConnectionMetricsService? metrics = null)
         {
             _serviceScopeFactory = serviceScopeFactory;
             _hostKeyService = hostKeyService;
@@ -92,6 +94,10 @@ namespace HIM.Gateway.Services.SSH
             _logger = logger;
             _settings = settings.Value;
             _connectionSemaphore = new SemaphoreSlim(_settings.MaxConnections, _settings.MaxConnections);
+            // Optional, defaulting to a private instance built from the same gate list: keeps
+            // this constructor callable without a DI container (ConnectionGatePipelineTests drives
+            // EvaluateGates directly), while production always gets the real registered singleton.
+            _metrics = metrics ?? new ConnectionMetricsService(_gates, TimeProvider.System);
         }
 
         // ── Public API ────────────────────────────────────────────────────
@@ -186,9 +192,14 @@ namespace HIM.Gateway.Services.SSH
             foreach (var gate in _gates)
             {
                 var result = gate.Evaluate(ctx);
-                if (!result.IsAllowed) return result;
+                if (!result.IsAllowed)
+                {
+                    _metrics.RecordRejected(gate.Layer);
+                    return result;
+                }
             }
 
+            _metrics.RecordAllowed();
             return GateResult.Allow();
         }
 

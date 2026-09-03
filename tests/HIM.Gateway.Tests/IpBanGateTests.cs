@@ -15,6 +15,7 @@ public class IpBanGateTests
         public bool IsBanned(string ipAddress) => _banned.Contains(ipAddress);
         public void RecordStrike(string ipAddress) { }
         public void Prune() { }
+        public IReadOnlyList<BannedIpSnapshot> GetActiveBans() => Array.Empty<BannedIpSnapshot>();
     }
 
     [Fact]

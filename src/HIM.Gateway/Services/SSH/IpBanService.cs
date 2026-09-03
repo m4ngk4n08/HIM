@@ -93,6 +93,25 @@ namespace HIM.Gateway.Services.SSH
                 _ = Task.Run(Prune);
         }
 
+        public IReadOnlyList<BannedIpSnapshot> GetActiveBans()
+        {
+            var now = DateTime.UtcNow.Ticks;
+            var result = new List<BannedIpSnapshot>();
+
+            // ConcurrentDictionary's enumerator is a weakly-consistent, point-in-time-ish walk
+            // that never throws under concurrent writes - materializing it into a List here is
+            // what turns that into an actual snapshot a renderer can safely hold onto afterwards.
+            foreach (var (ip, entry) in _banMap)
+            {
+                if (entry.BanExpiresAtTicks > 0 && entry.BanExpiresAtTicks > now)
+                {
+                    result.Add(new BannedIpSnapshot(ip, entry.StrikeCount, new DateTime(entry.BanExpiresAtTicks, DateTimeKind.Utc)));
+                }
+            }
+
+            return result;
+        }
+
         public void Prune()
         {
             var now = DateTime.UtcNow.Ticks;

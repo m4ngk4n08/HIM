@@ -17,6 +17,7 @@ public class PerIpConcurrencyGateTests
         public bool IsBanned(string ipAddress) => false;
         public void RecordStrike(string ipAddress) => StrikeCount++;
         public void Prune() { }
+        public IReadOnlyList<BannedIpSnapshot> GetActiveBans() => Array.Empty<BannedIpSnapshot>();
     }
 
     private static (PerIpConcurrencyGate Gate, FakeIpBanService BanService) CreateGate(int maxConcurrent = 3)

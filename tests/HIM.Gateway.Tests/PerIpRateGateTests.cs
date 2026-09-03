@@ -20,6 +20,7 @@ public class PerIpRateGateTests
         public bool IsBanned(string ipAddress) => false;
         public void RecordStrike(string ipAddress) => StrikeCount++;
         public void Prune() { }
+        public IReadOnlyList<BannedIpSnapshot> GetActiveBans() => Array.Empty<BannedIpSnapshot>();
     }
 
     private static (PerIpRateGate Gate, FakeIpBanService BanService) CreateGate(

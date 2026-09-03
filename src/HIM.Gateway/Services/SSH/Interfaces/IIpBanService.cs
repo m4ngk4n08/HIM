@@ -4,6 +4,9 @@ using System.Text;
 
 namespace HIM.Gateway.Services.SSH.Interfaces
 {
+    /// <summary>One currently-banned IP, as of the moment GetActiveBans() was called.</summary>
+    public readonly record struct BannedIpSnapshot(string IpAddress, int StrikeCount, DateTime BanExpiresUtc);
+
     public interface IIpBanService
     {
         /// <summary>
@@ -26,5 +29,12 @@ namespace HIM.Gateway.Services.SSH.Interfaces
         /// called automatically on schedule; can be invoked manually.
         /// </summary>
         void Prune();
+
+        /// <summary>
+        /// A materialized copy of every IP currently serving an active ban - not a live view of
+        /// the internal map, so a renderer iterating it never races the accept loop mutating the
+        /// same dictionary underneath it.
+        /// </summary>
+        IReadOnlyList<BannedIpSnapshot> GetActiveBans();
     }
 }
