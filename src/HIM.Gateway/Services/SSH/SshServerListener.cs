@@ -64,6 +64,7 @@ namespace HIM.Gateway.Services.SSH
         private readonly ILogger<SshServerListener> _logger;
         private readonly SshSettings _settings;
         private readonly IConnectionMetricsService _metrics;
+        private readonly ISessionRegistryService _sessionRegistry;
 
         // ── Global Semaphore (bounds total concurrent SSH sessions) ────────
         private readonly SemaphoreSlim _connectionSemaphore;
@@ -81,7 +82,8 @@ namespace HIM.Gateway.Services.SSH
             IConnectionSlotGate slotGate,
             ILogger<SshServerListener> logger,
             IOptions<SshSettings> settings,
-            IConnectionMetricsService metrics)
+            IConnectionMetricsService metrics,
+            ISessionRegistryService sessionRegistry)
         {
             _serviceScopeFactory = serviceScopeFactory;
             _hostKeyService = hostKeyService;
@@ -99,6 +101,7 @@ namespace HIM.Gateway.Services.SSH
             // silently count into a throwaway instance while /defense reported zeros forever with
             // nothing failing anywhere. A required parameter turns that into a startup error.
             _metrics = metrics;
+            _sessionRegistry = sessionRegistry;
         }
 
         // ── Public API ────────────────────────────────────────────────────
@@ -453,7 +456,7 @@ namespace HIM.Gateway.Services.SSH
                         if (!channelCts.IsCancellationRequested)  // <-- guard
                         {
                             _ = Task.Run(() => RunTuiInScopeAsync(
-                                channel, terminalWidth, terminalHeight, channelCts.Token,
+                                channel, ipAddress, terminalWidth, terminalHeight, channelCts.Token,
                                 e2 => Volatile.Write(ref engine, e2)));
                         }
                         break;
@@ -533,13 +536,30 @@ namespace HIM.Gateway.Services.SSH
         /// (and can keep reaching it, via a null-conditional call, if it fires before this runs).
         /// </param>
         private Task RunTuiInScopeAsync(
-            SshChannel channel, uint width, uint height, CancellationToken ct,
+            SshChannel channel, string ipAddress, uint width, uint height, CancellationToken ct,
             Action<ITuiEngine> onEngineResolved) =>
-            RunInScopeAsync((sp, token) =>
+            RunInScopeAsync(async (sp, token) =>
             {
-                var engine = sp.GetRequiredService<ITuiEngine>();
-                onEngineResolved(engine);
-                return engine.RunAsync(channel, width, height, token);
+                // Task 24C: register this session for the life of the scope, deregister in the
+                // finally so a session that ends by exception doesn't linger in /who forever -
+                // the same acquire/release shape as PerIpConcurrencyGate.Release. UserSessionState
+                // is resolved only to read its SessionId (a plain string) so /who's own-row
+                // highlight lines up with the id CommandContext already hands every command -
+                // never the UserSessionState reference itself, which a singleton must not hold.
+                // GetService (not Required): ChannelRequestSecurityTests builds a container with
+                // only ITuiEngine registered, and that test never reads the registry back.
+                var sessionId = sp.GetService<UserSessionState>()?.SessionId ?? Guid.NewGuid().ToString();
+                _sessionRegistry.Register(sessionId, ipAddress);
+                try
+                {
+                    var engine = sp.GetRequiredService<ITuiEngine>();
+                    onEngineResolved(engine);
+                    await engine.RunAsync(channel, width, height, token);
+                }
+                finally
+                {
+                    _sessionRegistry.Deregister(sessionId);
+                }
             }, ct);
 
         // ── Private Utilities ─────────────────────────────────────────────

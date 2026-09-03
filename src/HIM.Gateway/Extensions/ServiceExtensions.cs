@@ -46,6 +46,11 @@ namespace HIM.Gateway.Extensions
             // constructor sees the real IEnumerable<IConnectionGate> in registration order.
             services.AddSingleton<IConnectionMetricsService, ConnectionMetricsService>();
 
+            // Task 24C: who's connected right now, for /who. Registered/deregistered by
+            // SshServerListener around each session's DI scope - one process-wide table, so
+            // Singleton is correct, matching IConnectionMetricsService and IIpBanService above.
+            services.AddSingleton<ISessionRegistryService, SessionRegistryService>();
+
             // Persists high scores to a shared game-scores.json on disk - the leaderboard
             // is meant to be shared across every visitor, so Singleton is correct here.
             services.AddSingleton<IGameScoreService, GameScoreService>();

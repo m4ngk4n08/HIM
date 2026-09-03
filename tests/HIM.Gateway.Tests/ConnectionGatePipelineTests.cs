@@ -92,7 +92,8 @@ public class ConnectionGatePipelineTests
             slotGate: new NoopConnectionSlotGate(),
             logger: NullLoggerFactory.Instance.CreateLogger<SshServerListener>(),
             settings: Options.Create(new SshSettings()),
-            metrics: new ConnectionMetricsService(gates, TimeProvider.System));
+            metrics: new ConnectionMetricsService(gates, TimeProvider.System),
+            sessionRegistry: new SessionRegistryService(TimeProvider.System));
 
         var result = listener.EvaluateGates(new ConnectionContext("203.0.113.9"));
 

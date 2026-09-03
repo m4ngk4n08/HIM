@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Claims;
@@ -13,26 +13,30 @@ using Microsoft.DevTunnels.Ssh.Messages;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 
 namespace HIM.Gateway.Tests;
 
 /// <summary>
-/// Regression coverage for SshServerListener.HandleShellChannelAsync's channel-request switch
-/// (Task 11): "env" - and the other benign requests OpenSSH clients send unprompted - must be
-/// accepted and ignored rather than tearing down the session, while actual execution attempts
-/// ("exec", "subsystem") must still be refused and still disconnect. Drives the real
-/// Microsoft.DevTunnels.Ssh client/server stack over a loopback TCP socket so the assertions
-/// exercise the wire protocol, not a mocked event args object.
+/// Task 24C: drives the real accept-to-shell path (same harness shape as
+/// ChannelRequestSecurityTests) rather than calling SessionRegistryService.Deregister directly,
+/// to prove SshServerListener's own finally actually runs - including when the TUI engine
+/// throws, which is the leak case the brief calls out by name: a session that ends by exception
+/// must not linger in /who forever.
 /// </summary>
-public class ChannelRequestSecurityTests
+public class SessionRegistryLifecycleTests
 {
     private sealed class SignalingTuiEngine : ITuiEngine
     {
+        private readonly bool _throwOnRun;
         public TaskCompletionSource Reached { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public SignalingTuiEngine(bool throwOnRun) => _throwOnRun = throwOnRun;
 
         public Task RunAsync(SshChannel channel, uint width, uint height, CancellationToken ct)
         {
             Reached.TrySetResult();
+            if (_throwOnRun) throw new InvalidOperationException("simulated TUI crash");
             return Task.Delay(Timeout.InfiniteTimeSpan, ct).ContinueWith(_ => { }, TaskScheduler.Default);
         }
 
@@ -46,12 +50,30 @@ public class ChannelRequestSecurityTests
         public void Release(ConnectionContext ctx) { }
     }
 
+    private sealed class NoopHostKeyService : IHostKeyService
+    {
+        private readonly IKeyPair _key;
+        public NoopHostKeyService(IKeyPair key) => _key = key;
+        public Task<IKeyPair> GetHostKeyAsync() => Task.FromResult(_key);
+    }
+
+    private sealed class AllowAllAuthenticationService : IAuthenticationService
+    {
+        public void Authenticate(object? sender, SshAuthenticatingEventArgs e)
+        {
+            var principal = new ClaimsPrincipal(new ClaimsIdentity(
+                new[] { new Claim(ClaimTypes.Name, e.Username ?? "explorer") }, "SSH"));
+            e.AuthenticationTask = Task.FromResult<ClaimsPrincipal?>(principal);
+        }
+    }
+
     private sealed class Harness : IAsyncDisposable
     {
         public required SshServerListener Listener;
         public required SshServerSession ServerSession;
         public required SshClientSession ClientSession;
         public required SignalingTuiEngine TuiEngine;
+        public required ISessionRegistryService SessionRegistry;
         public required TcpListener TcpListener;
         public required TcpClient ServerTcp;
         public required TcpClient ClientTcp;
@@ -68,26 +90,27 @@ public class ChannelRequestSecurityTests
         }
     }
 
-    private static async Task<Harness> ConnectAsync()
+    private static async Task<Harness> ConnectAsync(bool tuiThrows)
     {
         var services = new ServiceCollection();
-        var tuiEngine = new SignalingTuiEngine();
+        var tuiEngine = new SignalingTuiEngine(tuiThrows);
         services.AddSingleton<ITuiEngine>(tuiEngine);
         var scopeFactory = services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
 
         var rsa = new Rsa("ssh-rsa", "SHA256");
         var hostKey = rsa.GenerateKeyPair(2048);
+        var sessionRegistry = new SessionRegistryService(TimeProvider.System);
 
         var listener = new SshServerListener(
             scopeFactory,
-            hostKeyService: new StaticHostKeyService(hostKey),
+            hostKeyService: new NoopHostKeyService(hostKey),
             authenticationService: new AllowAllAuthenticationService(),
             gates: Array.Empty<IConnectionGate>(),
             slotGate: new NoopConnectionSlotGate(),
             logger: NullLogger<SshServerListener>.Instance,
             settings: Options.Create(new SshSettings()),
             metrics: new ConnectionMetricsService(Array.Empty<IConnectionGate>(), TimeProvider.System),
-            sessionRegistry: new SessionRegistryService(TimeProvider.System));
+            sessionRegistry: sessionRegistry);
 
         var tcpListener = new TcpListener(IPAddress.Loopback, 0);
         tcpListener.Start();
@@ -119,10 +142,7 @@ public class ChannelRequestSecurityTests
         {
             if (e.Channel.ChannelType == "session")
             {
-                // Subscribe to the channel's Request event synchronously, before the
-                // channel-open confirmation is sent (AcceptChannelAsync below), so there is
-                // no window where a fast client's first channel request arrives unhandled.
-                listener.HandleShellChannelAsync(e.Channel, "127.0.0.1", CancellationToken.None, negotiationCts);
+                listener.HandleShellChannelAsync(e.Channel, "203.0.113.9", CancellationToken.None, negotiationCts);
                 _ = Task.Run(() => e.Channel.Session.AcceptChannelAsync(CancellationToken.None));
             }
         };
@@ -130,7 +150,6 @@ public class ChannelRequestSecurityTests
         var clientSession = new SshClientSession(config, trace);
         clientSession.Authenticating += (sender, e) =>
         {
-            // Test-only trust-on-first-use: accept whatever host key the server presents.
             e.AuthenticationTask = Task.FromResult<ClaimsPrincipal?>(new ClaimsPrincipal());
         };
 
@@ -148,6 +167,7 @@ public class ChannelRequestSecurityTests
             ServerSession = serverSession,
             ClientSession = clientSession,
             TuiEngine = tuiEngine,
+            SessionRegistry = sessionRegistry,
             TcpListener = tcpListener,
             ServerTcp = serverTcp,
             ClientTcp = clientTcp,
@@ -155,91 +175,65 @@ public class ChannelRequestSecurityTests
         };
     }
 
-    private sealed class StaticHostKeyService : IHostKeyService
+    private static async Task<SshChannel> OpenShellAsync(Harness h, CancellationToken ct)
     {
-        private readonly IKeyPair _key;
-        public StaticHostKeyService(IKeyPair key) => _key = key;
-        public Task<IKeyPair> GetHostKeyAsync() => Task.FromResult(_key);
-    }
-
-    private sealed class AllowAllAuthenticationService : IAuthenticationService
-    {
-        public void Authenticate(object? sender, SshAuthenticatingEventArgs e)
-        {
-            var principal = new ClaimsPrincipal(new ClaimsIdentity(
-                new[] { new Claim(ClaimTypes.Name, e.Username ?? "explorer") }, "SSH"));
-            e.AuthenticationTask = Task.FromResult<ClaimsPrincipal?>(principal);
-        }
-    }
-
-    // Every request type the fix accepts, not just "env" - otherwise deleting one of the other
-    // three cases breaks no test. "eow@openssh.com" is the next most likely to matter: OpenSSH
-    // clients send it at normal channel EOF, so refusing it would tear down a live session.
-    [Theory]
-    [InlineData("env")]
-    [InlineData("eow@openssh.com")]
-    [InlineData("xon-xoff")]
-    [InlineData("break")]
-    public async Task BenignRequest_IsAcceptedAndIgnored_SessionSurvivesToShell(string requestType)
-    {
-        await using var h = await ConnectAsync();
-        var timeout = TimeSpan.FromSeconds(10);
-        using var cts = new CancellationTokenSource(timeout);
-
         var channel = await h.ClientSession.OpenChannelAsync(
-            new ChannelOpenMessage { ChannelType = "session" }, null, cts.Token);
+            new ChannelOpenMessage { ChannelType = "session" }, null, ct);
 
         var ptyOk = await channel.RequestAsync(
             new TerminalRequestMessage { RequestType = "pty-req", WantReply = true, Term = "xterm", Columns = 80, Rows = 24 },
-            cts.Token);
+            ct);
         Assert.True(ptyOk);
-
-        var benignOk = await channel.RequestAsync(
-            new ChannelRequestMessage { RequestType = requestType, WantReply = true },
-            cts.Token);
-        Assert.True(benignOk);
-
-        Assert.False(h.ServerSession.IsClosed);
-        Assert.False(channel.IsClosed);
 
         var shellOk = await channel.RequestAsync(
-            new ShellRequestMessage { RequestType = "shell", WantReply = true },
-            cts.Token);
+            new ShellRequestMessage { RequestType = "shell", WantReply = true }, ct);
         Assert.True(shellOk);
 
-        var reachedTui = await Task.WhenAny(h.TuiEngine.Reached.Task, Task.Delay(timeout, cts.Token));
-        Assert.Same(h.TuiEngine.Reached.Task, reachedTui);
-
-        Assert.False(h.ServerSession.IsClosed);
+        return channel;
     }
 
-    [Theory]
-    [InlineData("exec")]
-    [InlineData("subsystem")]
-    public async Task ExecutionRequest_IsRefusedAndDisconnects(string requestType)
+    private static async Task WaitUntilEmptyAsync(ISessionRegistryService registry, TimeSpan timeout)
     {
-        await using var h = await ConnectAsync();
-        var timeout = TimeSpan.FromSeconds(10);
-        using var cts = new CancellationTokenSource(timeout);
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (registry.GetActiveSessions().Count == 0) return;
+            await Task.Delay(20);
+        }
+        Assert.Empty(registry.GetActiveSessions());
+    }
 
-        var channel = await h.ClientSession.OpenChannelAsync(
-            new ChannelOpenMessage { ChannelType = "session" }, null, cts.Token);
+    [Fact]
+    public async Task SessionThatEndsCleanly_IsDeregistered()
+    {
+        await using var h = await ConnectAsync(tuiThrows: false);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
-        var ptyOk = await channel.RequestAsync(
-            new TerminalRequestMessage { RequestType = "pty-req", WantReply = true, Term = "xterm", Columns = 80, Rows = 24 },
-            cts.Token);
-        Assert.True(ptyOk);
+        await OpenShellAsync(h, cts.Token);
+        var reached = await Task.WhenAny(h.TuiEngine.Reached.Task, Task.Delay(TimeSpan.FromSeconds(10), cts.Token));
+        Assert.Same(h.TuiEngine.Reached.Task, reached);
 
-        var refused = await channel.RequestAsync(
-            new ChannelRequestMessage { RequestType = requestType, WantReply = true },
-            cts.Token);
-        Assert.False(refused);
+        Assert.NotEmpty(h.SessionRegistry.GetActiveSessions());
 
-        var closedTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        h.ServerSession.Closed += (_, _) => closedTcs.TrySetResult();
-        if (h.ServerSession.IsClosed) closedTcs.TrySetResult();
+        // Ends the session cleanly by closing the client - mirrors a visitor typing /exit or
+        // disconnecting normally.
+        await h.ClientSession.CloseAsync(SshDisconnectReason.ByApplication, "test complete");
 
-        var closed = await Task.WhenAny(closedTcs.Task, Task.Delay(timeout, cts.Token));
-        Assert.Same(closedTcs.Task, closed);
+        await WaitUntilEmptyAsync(h.SessionRegistry, TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public async Task SessionThatEndsByException_IsStillDeregistered()
+    {
+        // The leak case: if Deregister isn't in a finally, a session whose TUI engine throws
+        // stays in the registry forever and /who slowly fills with ghosts.
+        await using var h = await ConnectAsync(tuiThrows: true);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        await OpenShellAsync(h, cts.Token);
+        var reached = await Task.WhenAny(h.TuiEngine.Reached.Task, Task.Delay(TimeSpan.FromSeconds(10), cts.Token));
+        Assert.Same(h.TuiEngine.Reached.Task, reached);
+
+        await WaitUntilEmptyAsync(h.SessionRegistry, TimeSpan.FromSeconds(5));
     }
 }
