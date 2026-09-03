@@ -13,7 +13,7 @@ WORKDIR /app
 # Copy the published app
 COPY --from=build /app/publish .
 
-# Ensure /app is owned by the existing 'app' user (UID 1000)
+# Ensure /app is owned by the existing 'app' user (UID 1654)
 RUN chown -R app:app /app
 
 # Switch to the non‑root user 'app'

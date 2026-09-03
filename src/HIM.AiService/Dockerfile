@@ -17,7 +17,7 @@ COPY --from=build /app/publish .
 COPY knowledge-base.json .
 COPY Models/ ./Models/
 
-# Ensure /app is owned by the existing 'app' user (UID 1000)
+# Ensure /app is owned by the existing 'app' user (UID 1654)
 RUN chown -R app:app /app
 
 # Switch to the non‑root user 'app'
