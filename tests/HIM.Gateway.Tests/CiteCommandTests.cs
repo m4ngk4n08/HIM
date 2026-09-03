@@ -30,6 +30,28 @@ public class CiteCommandTests
         }
     }
 
+    // Task 23A: a queue of responses, one per expected call - lets a test assert exactly how many
+    // times the AI client was actually reached, same counting-fake shape as CommandRoutingTests.
+    private class CountingAiClientService : IAiClientService
+    {
+        private readonly Queue<(CitationResult? Result, string? Error)> _responses;
+        public int CallCount { get; private set; }
+
+        public CountingAiClientService(params (CitationResult? Result, string? Error)[] responses)
+        {
+            _responses = new Queue<(CitationResult? Result, string? Error)>(responses);
+        }
+
+        public IAsyncEnumerable<string> GetAiResponseAsync(string question, CancellationToken ct, string? correlationId = null)
+            => AsyncEnumerable.Empty<string>();
+
+        public Task<(CitationResult? Result, string? Error)> GetCitationsAsync(string question, CancellationToken ct, string? correlationId = null)
+        {
+            CallCount++;
+            return Task.FromResult(_responses.Dequeue());
+        }
+    }
+
     private static async Task<string> RunCiteAsync(string? lastQuestion, (CitationResult? Result, string? Error) citationResponse)
     {
         var sessionState = new UserSessionState { LastQuestion = lastQuestion };
@@ -161,5 +183,73 @@ public class CiteCommandTests
         await command.ExecuteAsync(context);
 
         Assert.Equal("What does Angelo build?", aiClient.LastQuestionAsked);
+    }
+
+    private static CitationResult MakeResult(string question) => new()
+    {
+        Question = question,
+        Chunks = [new CitationChunkResult { Label = "l", Score = 0.5f, Preview = question }],
+        Timings = new CitationTimingsResult { EmbeddingMs = 1, SearchMs = 1, ChunksScanned = 1, ChunksReturned = 1 }
+    };
+
+    private static async Task<string> ExecuteAsync(CiteCommand command)
+    {
+        var writer = new StringWriter();
+        var console = AnsiConsole.Create(new AnsiConsoleSettings
+        {
+            Ansi = AnsiSupport.No,
+            ColorSystem = ColorSystemSupport.NoColors,
+            Out = new AnsiConsoleOutput(writer)
+        });
+        using var stream = new MemoryStream();
+        var context = new CommandContext(console, stream, "/cite", new PortfolioData(), "session", CancellationToken.None);
+        await command.ExecuteAsync(context);
+        return writer.ToString();
+    }
+
+    [Fact]
+    public async Task RepeatCite_ForTheSameQuestion_DoesNotCallTheAiClientAgain()
+    {
+        var sessionState = new UserSessionState { LastQuestion = "q1" };
+        var aiClient = new CountingAiClientService((MakeResult("q1"), null));
+        var command = new CiteCommand(aiClient, sessionState);
+
+        var first = await ExecuteAsync(command);
+        var second = await ExecuteAsync(command);
+
+        Assert.Equal(1, aiClient.CallCount);
+        Assert.Contains("q1", first);
+        Assert.Contains("q1", second);
+    }
+
+    [Fact]
+    public async Task NewQuestion_AfterACachedCite_CallsTheClientAgain_AndRendersTheNewCitations()
+    {
+        var sessionState = new UserSessionState { LastQuestion = "q1" };
+        var aiClient = new CountingAiClientService((MakeResult("q1"), null), (MakeResult("q2"), null));
+        var command = new CiteCommand(aiClient, sessionState);
+
+        await ExecuteAsync(command);
+        sessionState.LastQuestion = "q2";
+        var second = await ExecuteAsync(command);
+
+        Assert.Equal(2, aiClient.CallCount);
+        Assert.Contains("q2", second);
+        Assert.DoesNotContain("q1", second);
+    }
+
+    [Fact]
+    public async Task ErrorResult_IsNotCached_SoASucceedingRetryCallsTheClientAgain()
+    {
+        var sessionState = new UserSessionState { LastQuestion = "q1" };
+        var aiClient = new CountingAiClientService((null, "transient failure"), (MakeResult("q1"), null));
+        var command = new CiteCommand(aiClient, sessionState);
+
+        var first = await ExecuteAsync(command);
+        var second = await ExecuteAsync(command);
+
+        Assert.Equal(2, aiClient.CallCount);
+        Assert.Contains("Couldn't retrieve citations", first);
+        Assert.Contains("q1", second);
     }
 }

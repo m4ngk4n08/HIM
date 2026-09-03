@@ -38,14 +38,30 @@ namespace HIM.Gateway.Services.SSH.Commands
 
             // No AI query budget or cooldown check here on purpose - this makes no model call,
             // it only re-runs retrieval against the question already asked.
-            var (result, error) = await _aiClientService.GetCitationsAsync(lastQuestion, context.Ct, context.SessionId);
-
-            if (error != null)
+            CitationResult? result;
+            var cached = _sessionState.CachedCitation;
+            if (cached != null && cached.Question == lastQuestion)
             {
-                // The error text came back from the AI service over the wire - free text, same
-                // egress boundary as everything else this command renders.
-                console.MarkupLine($"[red]Couldn't retrieve citations: {SanitizerExtension.RedactPhone(error).EscapeMarkup()}[/]");
-                return;
+                result = cached.Result;
+            }
+            else
+            {
+                string? error;
+                (result, error) = await _aiClientService.GetCitationsAsync(lastQuestion, context.Ct, context.SessionId);
+
+                if (error != null)
+                {
+                    // The error text came back from the AI service over the wire - free text, same
+                    // egress boundary as everything else this command renders. Not cached - a
+                    // transient failure must not stick for the rest of the session.
+                    console.MarkupLine($"[red]Couldn't retrieve citations: {SanitizerExtension.RedactPhone(error).EscapeMarkup()}[/]");
+                    return;
+                }
+
+                if (result != null)
+                {
+                    _sessionState.CachedCitation = new CachedCitation(lastQuestion, result);
+                }
             }
 
             if (result == null || result.Chunks.Count == 0)
