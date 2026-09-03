@@ -55,6 +55,10 @@ namespace HIM.Gateway.Extensions
             // name throws here, at startup, not at first use.
             services.AddSingleton(SlashCommandCatalog.Discover(typeof(ServiceExtensions).Assembly));
             services.AddScoped<ISlashCommandRegistry, SlashCommandRegistry>();
+            services.AddScoped<MenuCommand>();
+            services.AddScoped<StatsCommand>();
+            services.AddScoped<MatrixCommand>();
+            services.AddScoped<GameCommand>();
 
             // ── Scoped: one instance per SSH shell channel (session) ──
             // A scope is created in SshServerListener.HandleShellChannelAsync, around the
