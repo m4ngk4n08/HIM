@@ -7,13 +7,20 @@ namespace HIM.Gateway.Services.SSH.Commands
     [SlashCommand("/theme", "Change UI theme", Usage = "/theme [dark|neon|retro]", HelpOrder = 5)]
     public sealed class ThemeCommand : ISlashCommand
     {
+        private readonly IThemeService _theme;
+
+        public ThemeCommand(IThemeService theme)
+        {
+            _theme = theme;
+        }
+
         public Task ExecuteAsync(CommandContext context)
         {
             var console = context.Console;
             var parts = context.RawCommand.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length < 2)
             {
-                console.MarkupLine($"[{ThemeService.PrimaryColor}]Current theme: {ThemeService.CurrentTheme}[/]");
+                console.MarkupLine($"[{_theme.PrimaryColor}]Current theme: {_theme.CurrentTheme}[/]");
                 console.MarkupLine("[grey]Usage: /theme [dark|neon|retro][/]");
                 return Task.CompletedTask;
             }
@@ -26,7 +33,7 @@ namespace HIM.Gateway.Services.SSH.Commands
                 _ => Theme.Dark
             };
 
-            ThemeService.SetTheme(newTheme);
+            _theme.SetTheme(newTheme);
             console.MarkupLine($"[green]✓ Theme switched to {newTheme}![/]");
             console.MarkupLine("[grey]Type /clear to refresh the UI.[/]");
             return Task.CompletedTask;

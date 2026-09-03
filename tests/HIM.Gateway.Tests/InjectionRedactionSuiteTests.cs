@@ -101,6 +101,7 @@ public class InjectionRedactionSuiteTests
             new NoOpCommandRegistry(),
             new NoOpDispatcherHelper(),
             new NoOpTerminalLayoutService(),
+            new ThemeService(),
             new DebugEnabledLogger(),
             new FixedPortfolioDataProvider(),
             new UserSessionState(),

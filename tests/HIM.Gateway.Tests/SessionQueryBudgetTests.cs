@@ -88,6 +88,7 @@ public class SessionQueryBudgetTests
             new NoOpCommandRegistry(),
             new NoOpDispatcherHelper(),
             new NoOpTerminalLayoutService(),
+            new ThemeService(),
             new NullLogger(),
             new FixedPortfolioDataProvider(),
             new UserSessionState(),

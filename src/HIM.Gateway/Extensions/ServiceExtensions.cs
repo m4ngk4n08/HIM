@@ -83,6 +83,7 @@ namespace HIM.Gateway.Extensions
 
             // --- Layout Engine ---
             services.AddScoped<ITerminalLayoutService, TerminalLayoutService>();
+            services.AddScoped<IThemeService, ThemeService>();
 
             // --- Game Engine ---
             // The Factory resolves the games

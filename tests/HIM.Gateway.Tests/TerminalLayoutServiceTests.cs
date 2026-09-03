@@ -95,7 +95,7 @@ public class TerminalLayoutServiceTests
 
         var dispatcher = new RecordingCommandDispatcherHelper();
         var settings = Options.Create(new AiServiceSettings());
-        var service = new TerminalLayoutService(dispatcher, settings);
+        var service = new TerminalLayoutService(dispatcher, new ThemeService(), settings);
 
         using var stream = new MemoryStream();
         await service.InitializeTerminalLayoutAsync(console, stream, CancellationToken.None);

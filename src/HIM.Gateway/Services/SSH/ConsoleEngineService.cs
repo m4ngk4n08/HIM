@@ -15,15 +15,18 @@ namespace HIM.Gateway.Services.SSH
         private readonly SshSettings _settings;
         private readonly ICommandService _commandService;
         private readonly ITerminalLayoutService _terminalLayoutService;
+        private readonly IThemeService _theme;
 
         public ConsoleEngineService(
             ICommandService commandService,
             ITerminalLayoutService terminalLayoutService,
+            IThemeService theme,
             IOptions<SshSettings> settings)
         {
             _settings = settings.Value;
             _commandService = commandService;
             _terminalLayoutService = terminalLayoutService;
+            _theme = theme;
         }
 
         public IAnsiConsole CreateConsole(Stream stream, uint width, uint height)
@@ -244,7 +247,7 @@ namespace HIM.Gateway.Services.SSH
             // Add a gradient title before the spinner
             console.Write(new FigletText("INITIALIZING")
                 .Centered()
-                .Color(ThemeService.PrimaryColor));
+                .Color(_theme.PrimaryColor));
             console.WriteLine();
 
             await console.Status()

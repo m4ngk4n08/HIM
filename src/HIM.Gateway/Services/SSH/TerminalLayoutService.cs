@@ -11,6 +11,7 @@ namespace HIM.Gateway.Services.SSH;
 public class TerminalLayoutService : ITerminalLayoutService
 {
     private readonly ICommandDispatcherHelper _commandDispatcher;
+    private readonly IThemeService _theme;
     private readonly string _modelDisplayName;
     private readonly string[] _funFacts = new[]
     {
@@ -27,9 +28,10 @@ public class TerminalLayoutService : ITerminalLayoutService
     };
     private int _funFactIndex = 0;
 
-    public TerminalLayoutService(ICommandDispatcherHelper commandDispatcher, IOptions<AiServiceSettings> aiServiceSettings)
+    public TerminalLayoutService(ICommandDispatcherHelper commandDispatcher, IThemeService theme, IOptions<AiServiceSettings> aiServiceSettings)
     {
         _commandDispatcher = commandDispatcher;
+        _theme = theme;
         _modelDisplayName = aiServiceSettings.Value.ModelDisplayName;
     }
 
@@ -54,14 +56,14 @@ public class TerminalLayoutService : ITerminalLayoutService
         switch (layout.Variant)
         {
             case ChromeVariant.Full:
-                lineCount += RenderHeader(console);
+                lineCount += RenderHeader(console, _theme);
                 console.WriteLine();
                 lineCount++;
 
                 lineCount += RenderStatusBar(console);
 
                 lineCount += RenderFittedMarkupLine(console,
-                    text => $"[{ThemeService.PrimaryColor}]{Markup.Escape(text)}[/] [grey](SSH Edition)[/]",
+                    text => $"[{_theme.PrimaryColor}]{Markup.Escape(text)}[/] [grey](SSH Edition)[/]",
                     "Welcome to Angelo's Portfolio.");
                 lineCount += RenderFittedMarkupLine(console,
                     text => $"[grey]{Markup.Escape(text)}[/]",
@@ -104,17 +106,17 @@ public class TerminalLayoutService : ITerminalLayoutService
     /// from its own rendered segments rather than guessed. Replaces the old GetHeaderLineCount,
     /// which hard-coded 8 or 5 depending on width and admitted in a comment that it was an estimate.
     /// </summary>
-    private static int RenderHeader(IAnsiConsole console)
+    private static int RenderHeader(IAnsiConsole console, IThemeService theme)
     {
         var figlet = new FigletText("H I M")
             .Centered()
-            .Color(ThemeService.PrimaryColor);
+            .Color(theme.PrimaryColor);
 
         var panel = new Panel(figlet)
         {
-            Header = new PanelHeader($"[{ThemeService.AccentColor}] Heuristic Interactive Mockup [/]", Justify.Center),
+            Header = new PanelHeader($"[{theme.AccentColor}] Heuristic Interactive Mockup [/]", Justify.Center),
             Border = BoxBorder.Rounded,
-            BorderStyle = new Style(ThemeService.PrimaryColor)
+            BorderStyle = new Style(theme.PrimaryColor)
         };
 
         int lines = MeasureLines(panel, console);
@@ -176,12 +178,12 @@ public class TerminalLayoutService : ITerminalLayoutService
 
     private int RenderStatusBar(IAnsiConsole console)
     {
-        var theme = ThemeService.CurrentTheme.ToString().ToUpper();
+        var themeName = _theme.CurrentTheme.ToString().ToUpper();
 
         return RenderFittedMarkupLine(console,
-            m => $"[{ThemeService.PrimaryColor}]●[/] MODEL: [white]{Markup.Escape(m)}[/]  |  " +
-                 $"[{ThemeService.SecondaryColor}]▓[/] THEME: [white]{theme}[/]  |  " +
-                 $"[{ThemeService.AccentColor}]♢[/] SSH: [white]ACTIVE[/]",
+            m => $"[{_theme.PrimaryColor}]●[/] MODEL: [white]{Markup.Escape(m)}[/]  |  " +
+                 $"[{_theme.SecondaryColor}]▓[/] THEME: [white]{themeName}[/]  |  " +
+                 $"[{_theme.AccentColor}]♢[/] SSH: [white]ACTIVE[/]",
             _modelDisplayName);
     }
 
@@ -195,7 +197,7 @@ public class TerminalLayoutService : ITerminalLayoutService
     private int RenderCompactStatusLine(IAnsiConsole console)
     {
         return RenderFittedMarkupLine(console,
-            m => $"[{ThemeService.PrimaryColor}]●[/] HIM [grey]│[/] [white]{Markup.Escape(m)}[/] [grey]│[/] [{ThemeService.AccentColor}]SSH ACTIVE[/]",
+            m => $"[{_theme.PrimaryColor}]●[/] HIM [grey]│[/] [white]{Markup.Escape(m)}[/] [grey]│[/] [{_theme.AccentColor}]SSH ACTIVE[/]",
             _modelDisplayName);
     }
 

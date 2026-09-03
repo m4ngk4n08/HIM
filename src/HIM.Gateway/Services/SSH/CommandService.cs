@@ -21,6 +21,7 @@ public class CommandService : ICommandService
     private readonly ISlashCommandRegistry _commandRegistry;
     private readonly ICommandDispatcherHelper _commandDispatcherHelper;
     private readonly ITerminalLayoutService _terminalLayoutService;
+    private readonly IThemeService _theme;
     private readonly ILogger<CommandService> _logger;
     private readonly UserSessionState _sessionState;
     private readonly int _maxAiQueriesPerSession;
@@ -31,6 +32,7 @@ public class CommandService : ICommandService
         ISlashCommandRegistry commandRegistry,
         ICommandDispatcherHelper commandDispatcherHelper,
         ITerminalLayoutService terminalLayoutService,
+        IThemeService theme,
         ILogger<CommandService> logger,
         IPortfolioDataProvider portfolioDataProvider,
         UserSessionState sessionState,
@@ -40,6 +42,7 @@ public class CommandService : ICommandService
         _commandRegistry = commandRegistry;
         _commandDispatcherHelper = commandDispatcherHelper;
         _terminalLayoutService = terminalLayoutService;
+        _theme = theme;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _sessionState = sessionState;
         _maxAiQueriesPerSession = sshSettings.Value.MaxAiQueriesPerSession;
@@ -176,7 +179,7 @@ public class CommandService : ICommandService
             {
                 Header = new PanelHeader($"🤖 AI • {stopwatch.ElapsedMilliseconds}ms", Justify.Left),
                 Border = BoxBorder.Rounded,
-                BorderStyle = new Style(ThemeService.PrimaryColor),
+                BorderStyle = new Style(_theme.PrimaryColor),
                 Padding = new Padding(1, 1)
             };
             console.Write(panel);

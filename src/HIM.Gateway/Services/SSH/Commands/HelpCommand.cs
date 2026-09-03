@@ -8,10 +8,12 @@ namespace HIM.Gateway.Services.SSH.Commands
     public sealed class HelpCommand : ISlashCommand
     {
         private readonly ISlashCommandRegistry _commandRegistry;
+        private readonly IThemeService _theme;
 
-        public HelpCommand(ISlashCommandRegistry commandRegistry)
+        public HelpCommand(ISlashCommandRegistry commandRegistry, IThemeService theme)
         {
             _commandRegistry = commandRegistry;
+            _theme = theme;
         }
 
         public Task ExecuteAsync(CommandContext context)
@@ -25,8 +27,8 @@ namespace HIM.Gateway.Services.SSH.Commands
         {
             var table = new Table();
             table.Border(TableBorder.Rounded);
-            table.BorderColor(ThemeService.PrimaryColor);
-            table.Title = new TableTitle(" COMMANDS ", new Style(ThemeService.PrimaryColor));
+            table.BorderColor(_theme.PrimaryColor);
+            table.Title = new TableTitle(" COMMANDS ", new Style(_theme.PrimaryColor));
 
             table.AddColumn(new TableColumn("Command").Centered().NoWrap());
             table.AddColumn(new TableColumn("Description").NoWrap());
