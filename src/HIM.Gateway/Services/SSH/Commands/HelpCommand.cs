@@ -7,6 +7,13 @@ namespace HIM.Gateway.Services.SSH.Commands
     [SlashCommand("/help", "Show this list of commands", HelpOrder = 0)]
     public sealed class HelpCommand : ISlashCommand
     {
+        private readonly ISlashCommandRegistry _commandRegistry;
+
+        public HelpCommand(ISlashCommandRegistry commandRegistry)
+        {
+            _commandRegistry = commandRegistry;
+        }
+
         public Task ExecuteAsync(CommandContext context)
         {
             ShowHelp(context.Console);
@@ -24,14 +31,14 @@ namespace HIM.Gateway.Services.SSH.Commands
             table.AddColumn(new TableColumn("Command").Centered().NoWrap());
             table.AddColumn(new TableColumn("Description").NoWrap());
 
-            // Escape every string to ensure no markup is parsed
-            table.AddRow(Markup.Escape("/menu"), Markup.Escape("Interactive navigation menu"))
-                 .AddRow(Markup.Escape("/stats"), Markup.Escape("Developer RPG stats sheet"))
-                 .AddRow(Markup.Escape("/matrix"), Markup.Escape("Digital rain animation"))
-                 .AddRow(Markup.Escape("/game"), Markup.Escape("Developer trivia game"))
-                 .AddRow(Markup.Escape("/theme [dark|neon|retro]"), Markup.Escape("Change UI theme"))
-                 .AddRow(Markup.Escape("/clear"), Markup.Escape("Clear screen"))
-                 .AddRow(Markup.Escape("/exit"), Markup.Escape("Logout"));
+            // Escape every string to ensure no markup is parsed. /help doesn't list itself -
+            // that's how today's hardcoded table behaves, so the same descriptor set that
+            // routes /help is filtered by HandlerType, not re-typed, when rendering it.
+            foreach (var descriptor in _commandRegistry.Descriptors)
+            {
+                if (descriptor.HandlerType == typeof(HelpCommand)) continue;
+                table.AddRow(Markup.Escape(descriptor.Usage), Markup.Escape(descriptor.Description));
+            }
 
             console.Write(table);
         }

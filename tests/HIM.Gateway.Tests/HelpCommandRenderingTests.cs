@@ -1,0 +1,74 @@
+using HIM.Gateway.Models;
+using HIM.Gateway.Models.Knowledge;
+using HIM.Gateway.Services.SSH;
+using HIM.Gateway.Services.SSH.Interfaces;
+using Microsoft.Extensions.DependencyInjection;
+using Spectre.Console;
+
+namespace HIM.Gateway.Tests;
+
+/// <summary>
+/// Task 18E's exit gate: "/help rendered output is byte-identical to 04077d9's." This pins that
+/// by rebuilding the table exactly as CommandService.ShowHelp hardcoded it before the refactor
+/// (same border, title, columns, escaping, row order) and diffing the two renders directly,
+/// rather than eyeballing either one.
+/// </summary>
+public class HelpCommandRenderingTests
+{
+    private static string RenderOriginalHardcodedTable()
+    {
+        var table = new Table();
+        table.Border(TableBorder.Rounded);
+        table.BorderColor(ThemeService.PrimaryColor);
+        table.Title = new TableTitle(" COMMANDS ", new Style(ThemeService.PrimaryColor));
+
+        table.AddColumn(new TableColumn("Command").Centered().NoWrap());
+        table.AddColumn(new TableColumn("Description").NoWrap());
+
+        table.AddRow(Markup.Escape("/menu"), Markup.Escape("Interactive navigation menu"))
+             .AddRow(Markup.Escape("/stats"), Markup.Escape("Developer RPG stats sheet"))
+             .AddRow(Markup.Escape("/matrix"), Markup.Escape("Digital rain animation"))
+             .AddRow(Markup.Escape("/game"), Markup.Escape("Developer trivia game"))
+             .AddRow(Markup.Escape("/theme [dark|neon|retro]"), Markup.Escape("Change UI theme"))
+             .AddRow(Markup.Escape("/clear"), Markup.Escape("Clear screen"))
+             .AddRow(Markup.Escape("/exit"), Markup.Escape("Logout"));
+
+        return RenderToString(table);
+    }
+
+    private static string RenderToString(Table table)
+    {
+        var writer = new StringWriter();
+        var console = AnsiConsole.Create(new AnsiConsoleSettings
+        {
+            Ansi = AnsiSupport.No,
+            ColorSystem = ColorSystemSupport.NoColors,
+            Out = new AnsiConsoleOutput(writer)
+        });
+        console.Write(table);
+        return writer.ToString();
+    }
+
+    [Fact]
+    public async Task HelpCommand_RenderedOutput_IsByteIdenticalToTheOriginalHardcodedTable()
+    {
+        using var provider = GatewayServiceProviderFactory.Build();
+        using var scope = provider.CreateScope();
+        var registry = scope.ServiceProvider.GetRequiredService<ISlashCommandRegistry>();
+        Assert.True(registry.TryGet("/help", out var help));
+
+        var writer = new StringWriter();
+        var console = AnsiConsole.Create(new AnsiConsoleSettings
+        {
+            Ansi = AnsiSupport.No,
+            ColorSystem = ColorSystemSupport.NoColors,
+            Out = new AnsiConsoleOutput(writer)
+        });
+
+        using var stream = new MemoryStream();
+        var context = new CommandContext(console, stream, "/help", new PortfolioData(), "session", CancellationToken.None);
+        await help.ExecuteAsync(context);
+
+        Assert.Equal(RenderOriginalHardcodedTable(), writer.ToString());
+    }
+}
