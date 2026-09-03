@@ -24,8 +24,12 @@ namespace HIM.AiService.Security
         {
             // SEC-08: /health/live and /health/ready are probed by the container runtime /
             // orchestrator, which has no shared secret to send. Nothing behind them exposes
-            // knowledge-base content - only a boolean up/ready state.
-            if (context.Request.Path.StartsWithSegments("/health"))
+            // knowledge-base content - only a boolean up/ready state. Listed explicitly (not a
+            // "/health" prefix match) so a future endpoint mapped under /health/* is
+            // unauthenticated only if someone deliberately adds it here.
+            var path = context.Request.Path.Value;
+            if (string.Equals(path, "/health/live", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(path, "/health/ready", StringComparison.OrdinalIgnoreCase))
             {
                 await _next(context);
                 return;
