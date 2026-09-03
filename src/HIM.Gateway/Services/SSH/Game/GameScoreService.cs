@@ -1,4 +1,6 @@
-﻿using HIM.Gateway.Services.SSH.Interfaces.IGame;
+﻿using HIM.Gateway.Models;
+using HIM.Gateway.Services.SSH.Interfaces.IGame;
+using Microsoft.Extensions.Options;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -12,10 +14,16 @@ namespace HIM.Gateway.Services.SSH.Game
         private Dictionary<string, int> _scores = new(StringComparer.OrdinalIgnoreCase);
         private readonly object _lock = new();
 
-        public GameScoreService()
+        public GameScoreService(IOptions<GameSettings> settings)
         {
-            // Stores score in the gateway's execution directory (or a configured path)
-            _storagePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "game-scores.json");
+            // A relative path is resolved against the app's own directory, not the current
+            // working directory - matching PortfolioDataProvider and StatsCommandService. An
+            // absolute path (what the container sets via GameSettings__ScoresPath) is used as
+            // given.
+            var configuredPath = settings.Value.ScoresPath;
+            _storagePath = Path.IsPathRooted(configuredPath)
+                ? configuredPath
+                : Path.Combine(AppContext.BaseDirectory, configuredPath);
             LoadScores();
         }
 

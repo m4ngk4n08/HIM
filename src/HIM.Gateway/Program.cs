@@ -62,6 +62,7 @@ builder.Logging.AddSerilog(new LoggerConfiguration()
 builder.Services.Configure<SshSettings>(builder.Configuration.GetSection("SshSettings"));
 builder.Services.Configure<AiServiceSettings>(builder.Configuration.GetSection("AiServiceSettings"));
 builder.Services.Configure<KnowledgeBaseSettings>(builder.Configuration.GetSection("KnowledgeBaseSettings"));
+builder.Services.Configure<GameSettings>(builder.Configuration.GetSection("GameSettings"));
 
 builder.Services.AddService();
 

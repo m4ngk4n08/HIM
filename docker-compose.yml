@@ -36,9 +36,11 @@ services:
       - LC_ALL=en_US.UTF-8
       # ----- Logging (new) -----
       - LOG_PATH=/app/Logs/gateway-log-.json
+      - GameSettings__ScoresPath=/app/data/game-scores.json
     volumes:
       - ./keys/hostkey.pem:/app/hostkey.pem
       - /var/log/him:/app/Logs   # <--- same host directory
+      - ./data:/app/data   # game leaderboard; host dir must be owned by UID 1654
     depends_on:
       - him-ai
     restart: always
