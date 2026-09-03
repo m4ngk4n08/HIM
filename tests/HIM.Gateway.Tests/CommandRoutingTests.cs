@@ -36,6 +36,9 @@ public class CommandRoutingTests
                 await Task.CompletedTask;
             }
         }
+
+        public Task<(CitationResult? Result, string? Error)> GetCitationsAsync(string question, CancellationToken ct, string? correlationId = null)
+            => Task.FromResult<(CitationResult?, string?)>((null, null));
     }
 
     private class NoOpMenuService : IMenuCommandService
@@ -112,7 +115,7 @@ public class CommandRoutingTests
     });
 
     public static IEnumerable<object[]> AllCommandNames { get; } =
-        new[] { "/help", "/menu", "/stats", "/matrix", "/game", "/theme", "/clear", "/exit" }
+        new[] { "/help", "/menu", "/stats", "/matrix", "/game", "/theme", "/clear", "/exit", "/cite" }
             .Select(name => new object[] { name });
 
     [Theory]
@@ -155,6 +158,33 @@ public class CommandRoutingTests
         await commandService.ProcessCommandAsync(ConsoleOver(secondWriter), "/stats", stream, CancellationToken.None);
 
         Assert.Equal(0, sessionState.AiQueryCount);
+        Assert.DoesNotContain("cooling down", secondWriter.ToString());
+    }
+
+    [Fact]
+    public async Task CiteCommand_DoesNotIncrementAiBudget_AndIsNeverRateLimited()
+    {
+        // Task 22C: /cite makes no model call - it only re-runs retrieval against the question
+        // already asked - so it must not be charged to the AI budget or trip the cooldown, the
+        // same guarantee RecognizedCommand_DoesNotIncrementAiBudget_AndIsNeverRateLimited pins
+        // for every other registry command.
+        using var provider = BuildProvider().Provider;
+        using var scope = provider.CreateScope();
+        var commandService = scope.ServiceProvider.GetRequiredService<ICommandService>();
+        var sessionState = scope.ServiceProvider.GetRequiredService<UserSessionState>();
+        using var stream = new MemoryStream();
+
+        // A real question first, so LastQuestion is set and the budget/cooldown have already fired once.
+        var firstWriter = new StringWriter();
+        await commandService.ProcessCommandAsync(ConsoleOver(firstWriter), "What does Angelo build?", stream, CancellationToken.None);
+        Assert.Equal(1, sessionState.AiQueryCount);
+
+        // /cite immediately after, no delay - if it were treated as an AI query it would trip
+        // the 3-second cooldown the same way a second real question would.
+        var secondWriter = new StringWriter();
+        await commandService.ProcessCommandAsync(ConsoleOver(secondWriter), "/cite", stream, CancellationToken.None);
+
+        Assert.Equal(1, sessionState.AiQueryCount);
         Assert.DoesNotContain("cooling down", secondWriter.ToString());
     }
 

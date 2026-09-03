@@ -115,6 +115,7 @@ public class CommandService : ICommandService
                 return;
             }
             _sessionState.AiQueryCount++;
+            _sessionState.LastQuestion = command;
             await HandleAiChatAsync(console, command, sessionId, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

@@ -56,6 +56,9 @@ public class AiChatCaptureTests
         public IAsyncEnumerable<string> GetAiResponseAsync(string question, CancellationToken ct, string? correlationId = null)
             => Chunks(_chunks);
 
+        public Task<(CitationResult? Result, string? Error)> GetCitationsAsync(string question, CancellationToken ct, string? correlationId = null)
+            => Task.FromResult<(CitationResult?, string?)>((null, null));
+
         private static async IAsyncEnumerable<string> Chunks(string[] parts)
         {
             foreach (var p in parts)

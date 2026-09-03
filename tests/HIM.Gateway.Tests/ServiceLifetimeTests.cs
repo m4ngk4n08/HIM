@@ -123,6 +123,25 @@ public class ServiceLifetimeTests
     }
 
     [Fact]
+    public void TwoConcurrentSessions_LastQuestionInOneScope_DoesNotAffectTheOther()
+    {
+        // Task 22C: /cite reads UserSessionState.LastQuestion. If that ever leaked across scopes
+        // the way the pre-BL-10 static ThemeService did, one visitor's /cite could show another
+        // visitor's question and the knowledge-base chunks that answered it.
+        using var provider = GatewayServiceProviderFactory.Build();
+
+        using var sessionOneScope = provider.CreateScope();
+        using var sessionTwoScope = provider.CreateScope();
+
+        var stateOne = sessionOneScope.ServiceProvider.GetRequiredService<UserSessionState>();
+        var stateTwo = sessionTwoScope.ServiceProvider.GetRequiredService<UserSessionState>();
+
+        stateOne.LastQuestion = "What does Angelo build?";
+
+        Assert.Null(stateTwo.LastQuestion);
+    }
+
+    [Fact]
     public void ThirdScope_CreatedAfterFirstScopeDisposed_StillGetsTheDefaultTheme()
     {
         // The worse half of BL-10: the next visitor to connect inherited whatever theme the

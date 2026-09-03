@@ -31,7 +31,8 @@ public class HelpCommandRenderingTests
              .AddRow(Markup.Escape("/game"), Markup.Escape("Developer trivia game"))
              .AddRow(Markup.Escape("/theme [dark|neon|retro]"), Markup.Escape("Change UI theme"))
              .AddRow(Markup.Escape("/clear"), Markup.Escape("Clear screen"))
-             .AddRow(Markup.Escape("/exit"), Markup.Escape("Logout"));
+             .AddRow(Markup.Escape("/exit"), Markup.Escape("Logout"))
+             .AddRow(Markup.Escape("/cite"), Markup.Escape("Show which knowledge-base chunks answered your last question"));
 
         return RenderToString(table);
     }

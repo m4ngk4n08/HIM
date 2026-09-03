@@ -77,6 +77,9 @@ public class SessionQueryBudgetTests
                 await Task.CompletedTask;
             }
         }
+
+        public Task<(CitationResult? Result, string? Error)> GetCitationsAsync(string question, CancellationToken ct, string? correlationId = null)
+            => Task.FromResult<(CitationResult?, string?)>((null, null));
     }
 
     private static (CommandService Service, CountingAiClientService AiClient, StringWriter Writer) BuildService(int maxQueriesPerSession)
