@@ -53,16 +53,18 @@ namespace HIM.Gateway.Extensions
             // connection gets its own DI scope, so scanning here instead of in the registry
             // means this runs once per process, not once per visitor). A duplicate [SlashCommand]
             // name throws here, at startup, not at first use.
-            services.AddSingleton(SlashCommandCatalog.Discover(typeof(ServiceExtensions).Assembly));
+            var slashCommandCatalog = SlashCommandCatalog.Discover(typeof(ServiceExtensions).Assembly);
+            services.AddSingleton(slashCommandCatalog);
             services.AddScoped<ISlashCommandRegistry, SlashCommandRegistry>();
-            services.AddScoped<MenuCommand>();
-            services.AddScoped<StatsCommand>();
-            services.AddScoped<MatrixCommand>();
-            services.AddScoped<GameCommand>();
-            services.AddScoped<HelpCommand>();
-            services.AddScoped<ClearCommand>();
-            services.AddScoped<ExitCommand>();
-            services.AddScoped<ThemeCommand>();
+
+            // Registered FROM the catalog rather than by hand. Discovery is automatic, so
+            // registration has to be too: a hand-written list means a new [SlashCommand] class is
+            // discovered, listed by /help, and then throws GetRequiredService when a visitor types
+            // it - /help advertising a command that kills the session is the exact drift Move 3
+            // exists to prevent, just moved from the help table into the container. Scoped for the
+            // same reason as the registry: handlers wrap scoped I*CommandService instances.
+            foreach (var descriptor in slashCommandCatalog.Descriptors)
+                services.AddScoped(descriptor.HandlerType);
 
             // ── Scoped: one instance per SSH shell channel (session) ──
             // A scope is created in SshServerListener.HandleShellChannelAsync, around the
