@@ -12,6 +12,11 @@
         public string Label { get; set; } = string.Empty;
         public float Score { get; set; }
         public string Preview { get; set; } = string.Empty;
+
+        // Task 27A: the whole chunk, everything after the section label, untrimmed - unlike
+        // Preview, which stays capped at PreviewMaxLength on purpose (see RagService). This is
+        // what lets the gateway's /cite <n> show a source in full without a second network call.
+        public string FullText { get; set; } = string.Empty;
     }
 
     public class CitationTimings
