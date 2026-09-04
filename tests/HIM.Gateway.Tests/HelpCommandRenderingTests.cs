@@ -35,7 +35,8 @@ public class HelpCommandRenderingTests
              .AddRow(Markup.Escape("/cite"), Markup.Escape("Show which knowledge-base chunks answered your last question"))
              .AddRow(Markup.Escape("/defense"), Markup.Escape("Live view of the 8-layer connection defense pipeline"))
              .AddRow(Markup.Escape("/who"), Markup.Escape("See who else is connected right now"))
-             .AddRow(Markup.Escape("/scores"), Markup.Escape("See the house record for every game"));
+             .AddRow(Markup.Escape("/scores"), Markup.Escape("See the house record for every game"))
+             .AddRow(Markup.Escape("/tour [quick|recruiter|engineer]"), Markup.Escape("Guided walkthrough of the portfolio"));
 
         return RenderToString(table);
     }

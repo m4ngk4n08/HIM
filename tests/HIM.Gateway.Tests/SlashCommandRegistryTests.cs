@@ -6,7 +6,7 @@ namespace HIM.Gateway.Tests;
 public class SlashCommandRegistryTests
 {
     [Fact]
-    public void Registry_ResolvesFromScopedProvider_WithAllTwelveCommandsDiscovered()
+    public void Registry_ResolvesFromScopedProvider_WithAllThirteenCommandsDiscovered()
     {
         using var provider = GatewayServiceProviderFactory.Build();
         using var scope = provider.CreateScope();
@@ -15,7 +15,7 @@ public class SlashCommandRegistryTests
 
         Assert.NotNull(registry);
         Assert.Equal(
-            new[] { "/help", "/menu", "/stats", "/matrix", "/game", "/theme", "/clear", "/exit", "/cite", "/defense", "/who", "/scores" },
+            new[] { "/help", "/menu", "/stats", "/matrix", "/game", "/theme", "/clear", "/exit", "/cite", "/defense", "/who", "/scores", "/tour" },
             registry.Descriptors.OrderBy(d => d.HelpOrder).Select(d => d.Name));
     }
 
