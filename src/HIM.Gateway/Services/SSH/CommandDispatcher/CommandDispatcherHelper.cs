@@ -1,3 +1,4 @@
+using HIM.Gateway.Services.SSH.Interfaces;
 using HIM.Gateway.Services.SSH.Interfaces.ICommandDispatcher;
 using Spectre.Console;
 using System.Text;
@@ -6,6 +7,13 @@ namespace HIM.Gateway.Services.SSH.CommandDispatcher
 {
     internal sealed class CommandDispatcherHelper : ICommandDispatcherHelper
     {
+        private readonly ISessionByteReader _byteReader;
+
+        public CommandDispatcherHelper(ISessionByteReader byteReader)
+        {
+            _byteReader = byteReader;
+        }
+
         public async Task<string> ReadInputManualAsync(IAnsiConsole console, Stream stream, CancellationToken ct)
         {
             var inputBuffer = new StringBuilder();
@@ -13,7 +21,11 @@ namespace HIM.Gateway.Services.SSH.CommandDispatcher
 
             while (!ct.IsCancellationRequested)
             {
-                int read = await stream.ReadAsync(buffer, 0, 1, ct);
+                // Task 25: reads go through the shared session byte reader, not the stream
+                // directly - it hands back whatever ConsoleEngineService's outer loop already
+                // pulled off the wire but didn't consume (e.g. the rest of a pasted line) before
+                // touching the socket itself.
+                int read = await _byteReader.ReadAsync(stream, buffer, 0, 1, ct);
                 if (read <= 0) break;
 
                 byte b = buffer[0];

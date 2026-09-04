@@ -16,17 +16,20 @@ namespace HIM.Gateway.Services.SSH
         private readonly ICommandService _commandService;
         private readonly ITerminalLayoutService _terminalLayoutService;
         private readonly IThemeService _theme;
+        private readonly ISessionByteReader _byteReader;
 
         public ConsoleEngineService(
             ICommandService commandService,
             ITerminalLayoutService terminalLayoutService,
             IThemeService theme,
+            ISessionByteReader byteReader,
             IOptions<SshSettings> settings)
         {
             _settings = settings.Value;
             _commandService = commandService;
             _terminalLayoutService = terminalLayoutService;
             _theme = theme;
+            _byteReader = byteReader;
         }
 
         public IAnsiConsole CreateConsole(Stream stream, uint width, uint height)
@@ -80,7 +83,7 @@ namespace HIM.Gateway.Services.SSH
                     timeoutCts?.Dispose();
                     timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
                     timeoutCts.CancelAfter(idleTimeout);
-                    int read = await stream.ReadAsync(buffer, 0, buffer.Length, timeoutCts.Token);
+                    int read = await _byteReader.ReadAsync(stream, buffer, 0, buffer.Length, timeoutCts.Token);
                     if (read <= 0) break;
 
                     bool lineChanged = false;
@@ -166,9 +169,22 @@ namespace HIM.Gateway.Services.SSH
                             inputBuffer.Clear();
 
                             console.WriteLine();
+
+                            // Any bytes still unread in this chunk (a paste, or keystrokes queued
+                            // during the splash animation) must not be consumed by this for-loop
+                            // while the command we're about to run might itself be waiting on the
+                            // stream (e.g. /menu, /game). Hand them back to the shared reader so
+                            // whichever prompt is actually asking gets them, then stop walking this
+                            // chunk - the outer while loop picks the rest back up next iteration.
+                            if (i + 1 < read)
+                            {
+                                _byteReader.PushBack(buffer.AsSpan(i + 1, read - i - 1));
+                            }
+
                             await _commandService.ProcessCommandAsync(console, command, stream, ct);
                             console.Write(new Text("> ", new Style(Color.Green)));
                             commandExecuted = true;
+                            break;
                         }
                         else if (b == 8 || b == 127)
                         {

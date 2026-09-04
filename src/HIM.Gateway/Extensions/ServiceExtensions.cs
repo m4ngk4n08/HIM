@@ -85,6 +85,11 @@ namespace HIM.Gateway.Extensions
             services.AddScoped<IConsoleEngineService, ConsoleEngineService>();
             services.AddScoped<UserSessionState>();
 
+            // Task 25: one owner for the session's stream reads, shared by ConsoleEngineService's
+            // outer loop and CommandDispatcherHelper's nested prompt reader. Scoped, not
+            // Singleton - it holds one visitor's unconsumed bytes.
+            services.AddScoped<ISessionByteReader, SessionByteReader>();
+
             services.AddScoped<IMenuCommandService, MenuCommandService>();
             services.AddScoped<IStatsCommandService, StatsCommandService>();
             services.AddScoped<IMatrixCommandService, MatrixCommandService>();
