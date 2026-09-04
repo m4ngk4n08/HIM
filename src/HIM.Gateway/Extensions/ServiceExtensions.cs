@@ -85,6 +85,10 @@ namespace HIM.Gateway.Extensions
             services.AddScoped<IConsoleEngineService, ConsoleEngineService>();
             services.AddScoped<UserSessionState>();
 
+            // Task 26B: /tour's selected mode, current step and active flag - one instance per
+            // session, exactly like UserSessionState above and for the same reason.
+            services.AddScoped<TourState>();
+
             // Task 25: one owner for the session's stream reads, shared by ConsoleEngineService's
             // outer loop and CommandDispatcherHelper's nested prompt reader. Scoped, not
             // Singleton - it holds one visitor's unconsumed bytes.

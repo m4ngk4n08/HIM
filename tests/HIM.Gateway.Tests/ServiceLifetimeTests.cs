@@ -161,6 +161,27 @@ public class ServiceLifetimeTests
         Assert.Equal(Theme.Dark, themeThree.CurrentTheme);
     }
 
+    [Fact]
+    public void TwoConcurrentSessions_GetDistinctTourState()
+    {
+        // Task 26B: a Singleton TourState would put every visitor on one person's tour step -
+        // the same class of bug as BL-10 (the static ThemeService) and the PacManGame singleton.
+        using var provider = GatewayServiceProviderFactory.Build();
+
+        using var sessionOneScope = provider.CreateScope();
+        using var sessionTwoScope = provider.CreateScope();
+
+        var stateOne = sessionOneScope.ServiceProvider.GetRequiredService<TourState>();
+        var stateTwo = sessionTwoScope.ServiceProvider.GetRequiredService<TourState>();
+
+        stateOne.IsActive = true;
+        stateOne.CurrentStepIndex = 3;
+
+        Assert.NotSame(stateOne, stateTwo);
+        Assert.False(stateTwo.IsActive);
+        Assert.Equal(0, stateTwo.CurrentStepIndex);
+    }
+
     private static IGameService ResolvePacMan(IServiceProvider provider)
     {
         var game = provider.GetServices<IGameService>().FirstOrDefault(g => g.Name == "Pac-Man");
