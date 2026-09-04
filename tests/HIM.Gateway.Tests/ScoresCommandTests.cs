@@ -5,6 +5,7 @@ using HIM.Gateway.Services.SSH.Commands;
 using HIM.Gateway.Services.SSH.Interfaces;
 using HIM.Gateway.Services.SSH.Interfaces.IGame;
 using Spectre.Console;
+using System.Text.RegularExpressions;
 
 namespace HIM.Gateway.Tests;
 
@@ -50,8 +51,17 @@ public class ScoresCommandTests
         var context = new CommandContext(console, stream, "/scores", new PortfolioData(), "session", CancellationToken.None);
 
         await command.ExecuteAsync(context);
-        return writer.ToString();
+        return StripAnsi(writer.ToString());
     }
+
+    // CI runs Linux, where Spectre emits decoration escapes (bold, reset) even with
+    // AnsiSupport.No - Windows honours the setting and emits none. That difference is why
+    // DoesNotContain("0") passed locally and failed in CI: "\e[0m" contains a "0", so the
+    // assertion was matching a reset sequence, not a score. Strip the escapes so assertions
+    // see rendered text on both platforms.
+    private static readonly Regex AnsiEscape = new(@"\u001b\[[0-9;]*m", RegexOptions.Compiled);
+
+    private static string StripAnsi(string value) => AnsiEscape.Replace(value, string.Empty);
 
     [Fact]
     public async Task EveryGameWithAScore_RendersItsBestScore()
