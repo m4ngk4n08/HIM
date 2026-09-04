@@ -1,5 +1,6 @@
 using HIM.Gateway.Services.SSH;
 using HIM.Gateway.Services.SSH.Interfaces;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 
 namespace HIM.Gateway.Tests;
@@ -60,5 +61,36 @@ public class SessionRegistryServiceTests
 
         var snapshot = Assert.Single(registry.GetActiveSessions());
         Assert.Equal(registeredAt + TimeSpan.FromMinutes(5), snapshot.ConnectedAtUtc);
+    }
+
+    [Fact]
+    public void TwoConcurrentSessions_KeepTheirOwnUserSessionState_AndBothRowsAppear()
+    {
+        // The registry is a singleton, so if it ever held anything scoped, two visitors connected
+        // at the same time would end up sharing one session's state - and ValidateScopes would not
+        // catch it, because putting a scoped object into a singleton's dictionary at runtime is
+        // legal DI, just wrong. Two real DI scopes are used here (rather than made-up id strings)
+        // so the isolation being asserted is the one production actually relies on.
+        using var provider = GatewayServiceProviderFactory.Build();
+        var registry = provider.GetRequiredService<ISessionRegistryService>();
+
+        using var scopeA = provider.CreateScope();
+        using var scopeB = provider.CreateScope();
+        var stateA = scopeA.ServiceProvider.GetRequiredService<UserSessionState>();
+        var stateB = scopeB.ServiceProvider.GetRequiredService<UserSessionState>();
+
+        // Neither session sees the other's UserSessionState: different instances, different ids.
+        Assert.NotSame(stateA, stateB);
+        Assert.NotEqual(stateA.SessionId, stateB.SessionId);
+
+        registry.Register(stateA.SessionId, "203.0.113.9");
+        registry.Register(stateB.SessionId, "198.51.100.4");
+
+        // Both appear, each row keyed to its own session - the registry only ever holds the id
+        // string, never the UserSessionState it came from.
+        var sessions = registry.GetActiveSessions();
+        Assert.Equal(2, sessions.Count);
+        Assert.Contains(sessions, s => s.SessionId == stateA.SessionId && s.IpAddress == "203.0.113.9");
+        Assert.Contains(sessions, s => s.SessionId == stateB.SessionId && s.IpAddress == "198.51.100.4");
     }
 }
