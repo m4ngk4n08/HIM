@@ -52,7 +52,7 @@ public class CiteCommandTests
         }
     }
 
-    private static async Task<string> RunCiteAsync(string? lastQuestion, (CitationResult? Result, string? Error) citationResponse)
+    private static async Task<string> RunCiteAsync(string? lastQuestion, (CitationResult? Result, string? Error) citationResponse, string rawCommand = "/cite")
     {
         var sessionState = new UserSessionState { LastQuestion = lastQuestion };
         var command = new CiteCommand(new FakeAiClientService(citationResponse), sessionState);
@@ -66,10 +66,27 @@ public class CiteCommandTests
         });
 
         using var stream = new MemoryStream();
-        var context = new CommandContext(console, stream, "/cite", new PortfolioData(), "session", CancellationToken.None);
+        var context = new CommandContext(console, stream, rawCommand, new PortfolioData(), "session", CancellationToken.None);
         await command.ExecuteAsync(context);
 
         return writer.ToString();
+    }
+
+    private static CitationResult MakeMultiSourceResult(params string[] fullTexts)
+    {
+        var chunks = fullTexts.Select((text, i) => new CitationChunkResult
+        {
+            Label = $"source{i + 1}",
+            Score = 0.9f - (i * 0.1f),
+            FullText = text
+        }).ToList();
+
+        return new CitationResult
+        {
+            Question = "q",
+            Chunks = chunks,
+            Timings = new CitationTimingsResult { EmbeddingMs = 1, SearchMs = 1, ChunksScanned = chunks.Count, ChunksReturned = chunks.Count }
+        };
     }
 
     [Fact]
@@ -280,7 +297,7 @@ public class CiteCommandTests
         Timings = new CitationTimingsResult { EmbeddingMs = 1, SearchMs = 1, ChunksScanned = 1, ChunksReturned = 1 }
     };
 
-    private static async Task<string> ExecuteAsync(CiteCommand command)
+    private static async Task<string> ExecuteAsync(CiteCommand command, string rawCommand = "/cite")
     {
         var writer = new StringWriter();
         var console = AnsiConsole.Create(new AnsiConsoleSettings
@@ -290,7 +307,7 @@ public class CiteCommandTests
             Out = new AnsiConsoleOutput(writer)
         });
         using var stream = new MemoryStream();
-        var context = new CommandContext(console, stream, "/cite", new PortfolioData(), "session", CancellationToken.None);
+        var context = new CommandContext(console, stream, rawCommand, new PortfolioData(), "session", CancellationToken.None);
         await command.ExecuteAsync(context);
         return writer.ToString();
     }
@@ -339,5 +356,102 @@ public class CiteCommandTests
         Assert.Equal(2, aiClient.CallCount);
         Assert.Contains("Couldn't retrieve citations", first);
         Assert.Contains("q1", second);
+    }
+
+    // Task 27C tests: /cite <n>.
+
+    [Fact]
+    public async Task CiteWithIndex_RendersThatSourcesFullText_BeyondThePreviewCap()
+    {
+        var longText = "topic: X. detail: " + new string('z', 200);
+        var result = MakeMultiSourceResult("first source content", longText);
+
+        var output = await RunCiteAsync("q", (result, null), rawCommand: "/cite 2");
+
+        // Console wrapping can split a 200-char run across lines, so count the character rather
+        // than asserting on a contiguous substring - the point is that it isn't cut off at 150.
+        Assert.True(output.Count(c => c == 'z') >= 200);
+        Assert.Contains("SOURCE 2", output);
+    }
+
+    [Fact]
+    public async Task CiteWithOutOfRangeIndex_RendersTheTablePlusAHint_NotAnError()
+    {
+        var result = MakeMultiSourceResult("a", "b");
+
+        var output = await RunCiteAsync("q", (result, null), rawCommand: "/cite 99");
+
+        Assert.Contains("SOURCES", output);
+        Assert.Contains("not a source number", output);
+    }
+
+    [Fact]
+    public async Task CiteWithNonNumericIndex_RendersTheTablePlusAHint_NotAnError()
+    {
+        var result = MakeMultiSourceResult("a", "b");
+
+        var output = await RunCiteAsync("q", (result, null), rawCommand: "/cite banana");
+
+        Assert.Contains("SOURCES", output);
+        Assert.Contains("not a source number", output);
+    }
+
+    [Fact]
+    public async Task CiteWithBadIndex_DoesNotClearTheCache()
+    {
+        var sessionState = new UserSessionState { LastQuestion = "q1" };
+        var aiClient = new CountingAiClientService((MakeResult("q1"), null));
+        var command = new CiteCommand(aiClient, sessionState);
+
+        await ExecuteAsync(command, "/cite banana");
+
+        Assert.NotNull(sessionState.CachedCitation);
+        Assert.Equal("q1", sessionState.CachedCitation!.Question);
+
+        // A follow-up plain /cite must still find the cache and not re-hit the AI service.
+        await ExecuteAsync(command, "/cite");
+        Assert.Equal(1, aiClient.CallCount);
+    }
+
+    [Fact]
+    public async Task CiteWithIndex_UsesTheCache_MakesNoAiServiceCall()
+    {
+        var sessionState = new UserSessionState { LastQuestion = "q1" };
+        var aiClient = new CountingAiClientService((MakeResult("q1"), null));
+        var command = new CiteCommand(aiClient, sessionState);
+
+        await ExecuteAsync(command, "/cite");
+        await ExecuteAsync(command, "/cite 1");
+
+        Assert.Equal(1, aiClient.CallCount);
+    }
+
+    [Fact]
+    public async Task CiteWithIndex_FullTextContainingACanary_RendersRedacted()
+    {
+        var result = new CitationResult
+        {
+            Question = "What's Angelo's number?",
+            Chunks = [new CitationChunkResult { Label = "l", Score = 0.5f, FullText = $"Reach out at {Canary} for more." }],
+            Timings = new CitationTimingsResult { EmbeddingMs = 1, SearchMs = 1, ChunksScanned = 1, ChunksReturned = 1 }
+        };
+
+        var output = await RunCiteAsync("What's Angelo's number?", (result, null), rawCommand: "/cite 1");
+
+        Assert.DoesNotContain(Canary, output);
+        Assert.Contains("[REDACTED_PHONE]", output);
+    }
+
+    [Fact]
+    public async Task CiteWithIndex_DoesNotIncrementAiBudgetOrTouchCooldown()
+    {
+        var sessionState = new UserSessionState { LastQuestion = "q1", AiQueryCount = 0, LastQuery = default };
+        var aiClient = new CountingAiClientService((MakeResult("q1"), null));
+        var command = new CiteCommand(aiClient, sessionState);
+
+        await ExecuteAsync(command, "/cite 1");
+
+        Assert.Equal(0, sessionState.AiQueryCount);
+        Assert.Equal(default, sessionState.LastQuery);
     }
 }
