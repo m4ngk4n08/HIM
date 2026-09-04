@@ -25,7 +25,7 @@ public class InputBufferRaceTests
 
     /// <summary>Stands in for CommandService: on "/menu" it drives the real nested reader and
     /// records what it got back, the same way MenuCommandService really does. Any other command
-    /// is just recorded, so a fix can assert nothing else was dispatched.</summary>
+    /// is just recorded, for the idle-timeout tests below.</summary>
     private sealed class NestedPromptCapturingCommandService : ICommandService
     {
         private readonly ICommandDispatcherHelper _dispatcher;
@@ -193,5 +193,62 @@ public class InputBufferRaceTests
 
         Assert.Equal("1", commands.CapturedNestedInput);
         Assert.Equal(new[] { "/menu" }, commands.ProcessedCommands);
+    }
+
+    [Fact]
+    public async Task NestedPromptAnsweredSlowly_DoesNotTriggerTheIdleTimeout()
+    {
+        // 25C: the idle timer must not start counting down against a nested prompt the visitor
+        // is actively answering. IdleTimeoutSeconds=1, but the answer to /menu arrives 1.3s later -
+        // if the outer loop's per-iteration idle CTS wrapped the nested read, this would time out
+        // and the answer would never be captured.
+        var (engine, commands) = BuildEngine(idleTimeoutSeconds: 1);
+        var output = new StringWriter();
+        var console = BuildConsole(output);
+
+        using var stream = new ScriptedStream(
+            (TimeSpan.Zero, "/menu\r"),
+            (TimeSpan.FromMilliseconds(1300), "1\r"));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+
+        try
+        {
+            await engine.HandleInteractionLoopAsync(console, stream, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+
+        Assert.Equal("1", commands.CapturedNestedInput);
+        Assert.DoesNotContain("timed out", output.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RealInputAcrossIterations_KeepsResettingTheIdleTimeout()
+    {
+        // 25C's other half: the idle timer must still reset on real visitor input. Three ordinary
+        // commands, each arriving 700ms after the last (under the 1s per-iteration budget), total
+        // 1.4s - longer than a single un-reset 1s deadline from session start would allow. If the
+        // timer only reset by luck (or not at all), the third command would never arrive.
+        var (engine, commands) = BuildEngine(idleTimeoutSeconds: 1);
+        var output = new StringWriter();
+        var console = BuildConsole(output);
+
+        using var stream = new ScriptedStream(
+            (TimeSpan.Zero, "hi\r"),
+            (TimeSpan.FromMilliseconds(700), "bye\r"),
+            (TimeSpan.FromMilliseconds(700), "yo\r"));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+
+        try
+        {
+            await engine.HandleInteractionLoopAsync(console, stream, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+
+        Assert.Equal(new[] { "hi", "bye", "yo" }, commands.ProcessedCommands);
+        Assert.DoesNotContain("timed out", output.ToString(), StringComparison.OrdinalIgnoreCase);
     }
 }
