@@ -181,7 +181,10 @@ namespace HIM.AiService.Services.AI
             {
                 Label = ExtractLabel(s.Chunk.Text),
                 Score = s.Score,
-                Preview = BuildPreview(s.Chunk.Text)
+                Preview = BuildPreview(s.Chunk.Text),
+                // Task 27A: the full chunk crosses the wire now too, so the gateway can render a
+                // source in full on request instead of being stuck with whatever Preview kept.
+                FullText = ExtractContent(s.Chunk.Text)
             }).ToList();
 
             return (new CitationResponse
@@ -209,9 +212,16 @@ namespace HIM.AiService.Services.AI
 
         private static string BuildPreview(string chunkText)
         {
-            var idx = chunkText.IndexOf(": ", StringComparison.Ordinal);
-            var content = idx > 0 ? chunkText[(idx + 2)..] : chunkText;
+            var content = ExtractContent(chunkText);
             return content.Length > PreviewMaxLength ? content[..PreviewMaxLength] + "…" : content;
+        }
+
+        // Task 27A: everything after the label, untrimmed - shared by BuildPreview (which then
+        // caps it) and the new FullText field (which doesn't).
+        private static string ExtractContent(string chunkText)
+        {
+            var idx = chunkText.IndexOf(": ", StringComparison.Ordinal);
+            return idx > 0 ? chunkText[(idx + 2)..] : chunkText;
         }
 
         private static int EstimateTokens(int charCount) => Math.Max(1, charCount / 4);

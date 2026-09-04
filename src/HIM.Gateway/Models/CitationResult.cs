@@ -18,6 +18,11 @@ namespace HIM.Gateway.Models
         public string Label { get; set; } = string.Empty;
         public float Score { get; set; }
         public string Preview { get; set; } = string.Empty;
+
+        // Task 27A: mirrors CitationChunk.FullText. Defaults to empty, same as every other field
+        // here - a gateway one version behind an AI service that hasn't shipped this yet just
+        // deserializes it as "", so callers must fall back to Preview rather than assume it's set.
+        public string FullText { get; set; } = string.Empty;
     }
 
     public class CitationTimingsResult

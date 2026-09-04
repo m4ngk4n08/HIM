@@ -54,6 +54,18 @@ public class RagServiceCitationsTests
     }
 
     [Fact]
+    public async Task OnTopicQuestion_FullTextIsNotTruncated_UnlikePreview()
+    {
+        // Task 27A: FullText carries the whole chunk; Preview stays capped at 150. Uses real KB
+        // data (median chunk length 214 chars, per the brief) rather than a synthetic string, so
+        // this proves the wire contract with production-shaped data, not just the mapping code.
+        var (result, _) = await CreateService().GetCitationsAsync("Tell me about his experience at Accenture");
+
+        Assert.NotNull(result);
+        Assert.Contains(result!.Chunks, c => c.FullText.Length > c.Preview.Length);
+    }
+
+    [Fact]
     public async Task OffTopicQuestion_ReturnsEmptyChunkList_NotAnError()
     {
         var (result, error) = await CreateService().GetCitationsAsync("What is the weather in Tokyo today?");
