@@ -50,12 +50,6 @@ artifacts/
 # stage the entire copy.
 .claude/
 /plans/
-/src/HIM.Gateway/Models/Tour/Enums/TourMode.cs
-/src/HIM.Gateway/Models/Tour/Enums/TourNavigationAction.cs
-/src/HIM.Gateway/Models/Tour/TourCommandResult.cs
-/src/HIM.Gateway/Models/Tour/TourSession.cs
-/src/HIM.Gateway/Models/Tour/TourStep.cs
-/src/HIM.Gateway/Models/Tour/TourTable.cs
 
 # Cryptographic material — NEVER commit
 hostkey.json
