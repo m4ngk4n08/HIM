@@ -12,8 +12,9 @@ namespace HIM.Gateway.Services.SSH.Commands
     [SlashCommand("/cite", "Show which knowledge-base chunks answered your last question", HelpOrder = 8)]
     public sealed class CiteCommand : ISlashCommand
     {
-        // Roughly 100 characters - legibility, not a knowledge-base dump. The AI service already
-        // caps its own preview at 150; this trims further for the terminal specifically.
+        // Task 27B: the one and only trim, applied once to the full text the AI service now
+        // sends - not to an already-truncated Preview. Roughly 100 characters: legibility, not a
+        // knowledge-base dump.
         private const int PreviewMaxLength = 100;
 
         private readonly IAiClientService _aiClientService;
@@ -73,17 +74,19 @@ namespace HIM.Gateway.Services.SSH.Commands
                 var table = new Table()
                     .Border(TableBorder.Rounded)
                     .Title("[bold cyan]SOURCES[/]");
-                table.AddColumn("Source").AddColumn("Score").AddColumn("Preview");
+                table.AddColumn("#").AddColumn("Source").AddColumn("Score").AddColumn("Preview");
 
-                foreach (var chunk in result.Chunks)
+                for (var i = 0; i < result.Chunks.Count; i++)
                 {
+                    var chunk = result.Chunks[i];
+
                     // Every rendered string - source label and preview alike - is free text out
                     // of the knowledge base, so both go through the same redaction boundary
                     // MenuCommandService uses (Task 21D/BL-8): a future free-text field is
                     // unprotected by default unless it's routed through RedactPhone explicitly.
                     var label = SanitizerExtension.RedactPhone(chunk.Label).EscapeMarkup();
-                    var preview = SanitizerExtension.RedactPhone(TrimPreview(chunk.Preview)).EscapeMarkup();
-                    table.AddRow(label, chunk.Score.ToString("F3"), preview);
+                    var preview = SanitizerExtension.RedactPhone(BuildPreview(chunk)).EscapeMarkup();
+                    table.AddRow((i + 1).ToString(), label, chunk.Score.ToString("F3"), preview);
                 }
 
                 console.Write(table);
@@ -98,7 +101,24 @@ namespace HIM.Gateway.Services.SSH.Commands
             }
         }
 
-        private static string TrimPreview(string preview) =>
-            preview.Length > PreviewMaxLength ? preview[..PreviewMaxLength] + "…" : preview;
+        // Task 27A: the AI service now sends the whole chunk (FullText); Preview is kept as the
+        // capped fallback for a gateway one version ahead of an AI service that hasn't shipped
+        // FullText yet - deserializing the missing field just leaves "".
+        private static string FullContent(CitationChunkResult chunk) =>
+            string.IsNullOrEmpty(chunk.FullText) ? chunk.Preview : chunk.FullText;
+
+        // Task 27B: chunk text is "topic: X. detail: Y" - splitting on the first ": " (what the
+        // old Preview did) put "topic: ..." in the column and ate ~40% of the visible budget.
+        // Preferring the text after "detail: " buys that back; falling back to the whole content
+        // keeps this sensible for a chunk that has no "detail: " segment at all.
+        private const string DetailMarker = "detail: ";
+
+        private static string BuildPreview(CitationChunkResult chunk)
+        {
+            var content = FullContent(chunk);
+            var idx = content.IndexOf(DetailMarker, StringComparison.Ordinal);
+            var preferred = idx >= 0 ? content[(idx + DetailMarker.Length)..] : content;
+            return preferred.Length > PreviewMaxLength ? preferred[..PreviewMaxLength] + "…" : preferred;
+        }
     }
 }

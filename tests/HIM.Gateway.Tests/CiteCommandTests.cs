@@ -133,6 +133,94 @@ public class CiteCommandTests
     }
 
     [Fact]
+    public async Task PreviewColumn_PrefersTextAfterDetailMarker_OverTopicPrefix()
+    {
+        var result = new CitationResult
+        {
+            Question = "q",
+            Chunks =
+            [
+                new CitationChunkResult
+                {
+                    Label = "what_i_build",
+                    Score = 0.5f,
+                    FullText = "topic: X. detail: the real content that matters."
+                }
+            ],
+            Timings = new CitationTimingsResult { EmbeddingMs = 1, SearchMs = 1, ChunksScanned = 1, ChunksReturned = 1 }
+        };
+
+        var output = await RunCiteAsync("q", (result, null));
+
+        Assert.Contains("the real content that matters", output);
+        Assert.DoesNotContain("topic: X", output);
+    }
+
+    [Fact]
+    public async Task PreviewColumn_WithNoDetailMarker_FallsBackToWholeContent()
+    {
+        var result = new CitationResult
+        {
+            Question = "q",
+            Chunks =
+            [
+                new CitationChunkResult
+                {
+                    Label = "career_break_note",
+                    Score = 0.5f,
+                    FullText = "no marker here"
+                }
+            ],
+            Timings = new CitationTimingsResult { EmbeddingMs = 1, SearchMs = 1, ChunksScanned = 1, ChunksReturned = 1 }
+        };
+
+        var output = await RunCiteAsync("q", (result, null));
+
+        Assert.Contains("no marker here", output);
+    }
+
+    [Fact]
+    public async Task PreviewColumn_FallsBackToPreview_WhenFullTextIsMissing()
+    {
+        // Task 27A: a gateway ahead of an AI service that hasn't shipped FullText yet - the
+        // field deserializes as "" - must not render an empty column.
+        var result = new CitationResult
+        {
+            Question = "q",
+            Chunks = [new CitationChunkResult { Label = "l", Score = 0.5f, Preview = "old-style preview text", FullText = "" }],
+            Timings = new CitationTimingsResult { EmbeddingMs = 1, SearchMs = 1, ChunksScanned = 1, ChunksReturned = 1 }
+        };
+
+        var output = await RunCiteAsync("q", (result, null));
+
+        Assert.Contains("old-style preview text", output);
+    }
+
+    [Fact]
+    public async Task Table_NumbersRowsFromOne_InRenderedOrder()
+    {
+        var result = new CitationResult
+        {
+            Question = "q",
+            Chunks =
+            [
+                new CitationChunkResult { Label = "first", Score = 0.9f, FullText = "first content" },
+                new CitationChunkResult { Label = "second", Score = 0.5f, FullText = "second content" }
+            ],
+            Timings = new CitationTimingsResult { EmbeddingMs = 1, SearchMs = 1, ChunksScanned = 2, ChunksReturned = 2 }
+        };
+
+        var output = await RunCiteAsync("q", (result, null));
+
+        Assert.Contains("#", output);
+        var lines = output.Split('\n');
+        var firstLine = Assert.Single(lines, l => l.Contains("first"));
+        var secondLine = Assert.Single(lines, l => l.Contains("second"));
+        Assert.Contains("1", firstLine);
+        Assert.Contains("2", secondLine);
+    }
+
+    [Fact]
     public async Task Timings_AreRendered_WithChunkCounts()
     {
         var result = new CitationResult
