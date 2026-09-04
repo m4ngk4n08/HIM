@@ -45,6 +45,10 @@ artifacts/
 # Specialized folders
 .gemini/
 .aider*
+# Claude Code keeps isolated agent worktrees under .claude/worktrees/ - a second full
+# checkout of this repo nested inside it. Untracked and unignored, a "git add -A" would
+# stage the entire copy.
+.claude/
 /plans/
 /src/HIM.Gateway/Models/Tour/Enums/TourMode.cs
 /src/HIM.Gateway/Models/Tour/Enums/TourNavigationAction.cs
