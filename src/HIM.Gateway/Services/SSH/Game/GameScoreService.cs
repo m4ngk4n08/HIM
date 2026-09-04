@@ -88,5 +88,16 @@ namespace HIM.Gateway.Services.SSH.Game
                 return Task.FromResult(_scores.GetValueOrDefault(name, 0));
             }
         }
+
+        public Task<IReadOnlyDictionary<string, int>> GetAllScoresAsync()
+        {
+            lock (_lock)
+            {
+                // A copy, not the live dictionary - callers must not be able to mutate the
+                // store by holding onto what this hands back.
+                return Task.FromResult<IReadOnlyDictionary<string, int>>(
+                    new Dictionary<string, int>(_scores, StringComparer.OrdinalIgnoreCase));
+            }
+        }
     }
 }

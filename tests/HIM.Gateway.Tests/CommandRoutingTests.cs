@@ -115,7 +115,7 @@ public class CommandRoutingTests
     });
 
     public static IEnumerable<object[]> AllCommandNames { get; } =
-        new[] { "/help", "/menu", "/stats", "/matrix", "/game", "/theme", "/clear", "/exit", "/cite", "/defense", "/who" }
+        new[] { "/help", "/menu", "/stats", "/matrix", "/game", "/theme", "/clear", "/exit", "/cite", "/defense", "/who", "/scores" }
             .Select(name => new object[] { name });
 
     [Theory]
@@ -223,6 +223,27 @@ public class CommandRoutingTests
         await commandService.ProcessCommandAsync(ConsoleOver(firstWriter), "/menu", stream, CancellationToken.None);
         var secondWriter = new StringWriter();
         await commandService.ProcessCommandAsync(ConsoleOver(secondWriter), "/who", stream, CancellationToken.None);
+
+        Assert.Equal(0, sessionState.AiQueryCount);
+        Assert.DoesNotContain("cooling down", secondWriter.ToString());
+    }
+
+    [Fact]
+    public async Task ScoresCommand_DoesNotIncrementAiBudget_AndIsNeverRateLimited()
+    {
+        // Same guarantee as CiteCommand/DefenseCommand/WhoCommand's version of this test:
+        // /scores makes no model call, so it must not be charged to the AI budget or trip the
+        // cooldown.
+        using var provider = BuildProvider().Provider;
+        using var scope = provider.CreateScope();
+        var commandService = scope.ServiceProvider.GetRequiredService<ICommandService>();
+        var sessionState = scope.ServiceProvider.GetRequiredService<UserSessionState>();
+        using var stream = new MemoryStream();
+
+        var firstWriter = new StringWriter();
+        await commandService.ProcessCommandAsync(ConsoleOver(firstWriter), "/menu", stream, CancellationToken.None);
+        var secondWriter = new StringWriter();
+        await commandService.ProcessCommandAsync(ConsoleOver(secondWriter), "/scores", stream, CancellationToken.None);
 
         Assert.Equal(0, sessionState.AiQueryCount);
         Assert.DoesNotContain("cooling down", secondWriter.ToString());
